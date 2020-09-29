@@ -3,13 +3,12 @@ package org.kodein.db.impl.model.cache
 import org.kodein.db.*
 import org.kodein.db.model.ModelBatch
 import org.kodein.db.model.ModelDB
-import org.kodein.db.model.ModelKeyMaker
 import org.kodein.db.model.ModelSnapshot
 import org.kodein.db.model.cache.ModelCache
 import org.kodein.memory.Closeable
 import kotlin.reflect.KClass
 
-internal class CachedModelDB(override val mdb: ModelDB, override val cache: ModelCache, override val copyMaxSize: Long) : CachedModelReadModule, ModelDB, ModelKeyMaker by mdb, Closeable by mdb {
+internal class CachedModelDB(override val mdb: ModelDB, override val cache: ModelCache, override val copyMaxSize: Long) : CachedModelReadModule, ModelDB, KeyMaker by mdb, Closeable by mdb {
 
     internal fun didPut(model: Any, key: Key<*>, size: Int, options: Array<out Options>) {
         if (ModelCache.Skip in options) cache.evict(key)
@@ -22,7 +21,7 @@ internal class CachedModelDB(override val mdb: ModelDB, override val cache: Mode
     }
 
     override fun <M : Any> put(model: M, vararg options: Options.Write): KeyAndSize<M> {
-        val key = mdb.newKeyFrom(model, *options)
+        val key = mdb.keyFrom(model, *options)
         val size = mdb.put(key, model, *(options + React(true) { didPut(model, key, it, options) }))
         return KeyAndSize(key, size)
     }

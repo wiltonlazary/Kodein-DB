@@ -1,7 +1,3 @@
-import org.jetbrains.kotlin.daemon.common.toHexString
-import java.util.*
-import java.security.MessageDigest
-
 plugins {
     `cpp-library`
     kotlin("multiplatform")
@@ -37,11 +33,13 @@ val configure = task("configureJniGeneration") {
         val jvmCompilation = kotlin.targets["jvm"].compilations["main"]
         val classPath = jvmCompilation.output.classesDirs + jvmCompilation.compileDependencyFiles
 
-        val javah: String? by project
+        var javah = project.findProperty("javah") as String? ?: "javah"
+        javah = javah.replace(Regex("\\\$\\{([^}]+)}")) { System.getenv(it.groupValues[1])
+                ?: error("No such environment variable: ${it.groupValues[1]}.\n  Environment:\n${System.getenv().map { (k, v) -> "    $k = \"$v\"" }.joinToString("\n")}") }
 
         val output = "$buildDir/nativeHeaders/kodein"
 
-        generation.setCommandLine(javah ?: "javah", "-d", output, "-cp", classPath.joinToString(":"), "org.kodein.db.leveldb.jni.Native")
+        generation.setCommandLine(javah, "-d", output, "-cp", classPath.joinToString(File.pathSeparator), "org.kodein.db.leveldb.jni.Native")
         generation.outputs.dir(output)
     }
 }
@@ -53,11 +51,18 @@ val generation = task<Exec>("generateJniHeaders") {
 }
 
 val javaHome: String = System.getProperty("java.home").let { if (it.endsWith("/jre")) file("$it/..").absolutePath else it }
-val currentOs = org.gradle.internal.os.OperatingSystem.current()!!
-val currentOsName = currentOs.name.toLowerCase().replace(" ", "")
+
+val os = System.getProperty("os.name").toLowerCase().let {
+    when  {
+        "windows" in it -> "windows"
+        "mac os x" in it || "darwin" in it || "osx" in it -> "macos"
+        "linux" in it -> "linux"
+        else -> error("Unknown operating system $it")
+    }
+}
 
 library {
-    this.baseName.set("kodein-leveldb-jni-$currentOsName-$version")
+    this.baseName.set("kodein-leveldb-jni-$os-${version.toString().replace('.', '_')}")
 
     privateHeaders {
         from("$javaHome/include")
@@ -68,14 +73,17 @@ library {
         from("$buildDir/nativeHeaders")
     }
 
-    if (currentOs.isLinux) {
+    if (os == "linux") {
         privateHeaders {
             from("$javaHome/include/linux")
         }
-    }
-    else if (currentOs.isMacOsX) {
+    } else if (os == "macos") {
         privateHeaders {
             from("$javaHome/include/darwin")
+        }
+    } else if (os == "windows") {
+        privateHeaders {
+            from("$javaHome/include/win32")
         }
     }
 
@@ -92,7 +100,7 @@ library {
                     "-L${project(":ldb:lib").buildDir}/out/host/lib",
                     "-lleveldb", "-lsnappy", "-lcrc32c"
             )
-            if (currentOs.isLinux) {
+            if (os == "linux") {
                 linkTask.get().linkerArgs.addAll(
                         "-static-libgcc", "-static-libstdc++"
                 )
@@ -102,39 +110,6 @@ library {
     }
 }
 
-listOf("debug", "release").forEach { type ->
-    val cType = type.capitalize()
-    task("genInfo$cType") {
-        dependsOn("link$cType")
-
-        val outputFile = file("$buildDir/generated/infos/$type/info.properties")
-        outputs.file(outputFile)
-
-        doLast {
-            val digest = MessageDigest.getInstance("SHA-1")
-            val buf = ByteArray(8192)
-            tasks["link$cType"].outputs.files
-                    .filter { it.name.endsWith(".so") || it.name.endsWith(".dylib") }
-                    .first()
-                    .inputStream()
-                    .use {
-                        while (true) {
-                            val n = it.read(buf)
-                            if (n == -1) break
-                            if (n > 0) digest.update(buf, 0, n)
-                        }
-                    }
-
-            val props = Properties()
-            props["version"] = version
-            props["os"] = currentOsName
-            props["sha1"] = digest.digest().toHexString()
-            outputFile.outputStream().use {
-                props.store(it, null)
-            }
-        }
-    }
-
+if (os != "windows") {
+    apply(from = rootProject.file("gradle/toolchains.gradle"))
 }
-
-apply(from = rootProject.file("gradle/toolchains.gradle"))

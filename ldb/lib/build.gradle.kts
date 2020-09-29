@@ -41,7 +41,7 @@ fun addCMakeTasks(lib: String, target: String, dir: String = lib, conf: CMakeOpt
         group = "build"
 
         workingDir("$buildDir/cmake/$lib-$target")
-        commandLine("cmake")
+        executable = "cmake"
 
         val options = CMakeOptions().apply {
             +"CMAKE_POSITION_INDEPENDENT_CODE:BOOL"
@@ -49,6 +49,11 @@ fun addCMakeTasks(lib: String, target: String, dir: String = lib, conf: CMakeOpt
             "CMAKE_C_FLAGS:STRING" += "-D_GLIBCXX_USE_CXX11_ABI=0"
             "CMAKE_CXX_FLAGS:STRING" += "-D_GLIBCXX_USE_CXX11_ABI=0"
             "CMAKE_BUILD_TYPE" += "Release"
+//            +"CMAKE_VERBOSE_MAKEFILE"
+
+            if (currentOs.isWindows) {
+                "G" -= "MinGW Makefiles"
+            }
 
             conf()
         }
@@ -69,7 +74,7 @@ fun addCMakeTasks(lib: String, target: String, dir: String = lib, conf: CMakeOpt
         dependsOn(configure)
 
         workingDir(configure.workingDir)
-        commandLine("cmake")
+        executable = "cmake"
         args(
                 "--build", ".",
                 "--config", "Release",
@@ -84,14 +89,16 @@ fun addCMakeTasks(lib: String, target: String, dir: String = lib, conf: CMakeOpt
     return configure to build
 }
 
-fun addTarget(target: String, conf: CMakeOptions.() -> Unit) : Task {
+fun addTarget(target: String, fpic: Boolean = true, conf: CMakeOptions.() -> Unit) : Task {
     val (_, buildCrc32c) = addCMakeTasks("crc32c", target) {
         "CRC32C_BUILD_BENCHMARKS:BOOL" += "0"
         "CRC32C_BUILD_TESTS:BOOL" += "0"
         "CRC32C_USE_GLOG:BOOL" += "0"
 
-        "CMAKE_C_FLAGS:STRING" += "-fPIC"
-        "CMAKE_CXX_FLAGS:STRING" += "-fPIC"
+        if (fpic) {
+            "CMAKE_C_FLAGS:STRING" += "-fPIC"
+            "CMAKE_CXX_FLAGS:STRING" += "-fPIC"
+        }
 
         conf()
     }
@@ -108,7 +115,8 @@ fun addTarget(target: String, conf: CMakeOptions.() -> Unit) : Task {
 
         "CMAKE_C_FLAGS:STRING" += "-I$buildDir/out/$target/include"
         "CMAKE_CXX_FLAGS:STRING" += "-I$buildDir/out/$target/include"
-        "CMAKE_EXE_LINKER_FLAGS:STRING" += "-L$buildDir/out/$target/lib -lstdc++"
+        +"HAVE_CRC32C"
+        +"HAVE_SNAPPY"
 
         conf()
     }
@@ -116,27 +124,48 @@ fun addTarget(target: String, conf: CMakeOptions.() -> Unit) : Task {
     configureLeveldb.dependsOn(buildCrc32c)
     configureLeveldb.dependsOn(buildSnappy)
 
-    buildAll.dependsOn(buildLevelDB)
-
     return buildLevelDB
 }
 
-addTarget("host") {
+addTarget("host", fpic = !currentOs.isWindows) {
     "CMAKE_C_COMPILER:STRING" += "clang"
     "CMAKE_CXX_COMPILER:STRING" += "clang++"
+
+    if (currentOs.isWindows) {
+        "CMAKE_C_FLAGS:STRING" += "-target x86_64-pc-windows-gnu -femulated-tls"
+        "CMAKE_CXX_FLAGS:STRING" += "-target x86_64-pc-windows-gnu -femulated-tls"
+    }
 }
 
-addTarget("konan") {
-    "CMAKE_C_COMPILER:STRING" += "clang"
-    "CMAKE_CXX_COMPILER:STRING" += "clang++"
+addTarget("konan", fpic = !currentOs.isWindows) {
+    when {
+        currentOs.isLinux -> {
+            "CMAKE_C_COMPILER:STRING" += "clang"
+            "CMAKE_CXX_COMPILER:STRING" += "clang++"
+            val path = "${System.getenv("HOME")}/.konan/dependencies/target-gcc-toolchain-3-linux-x86-64"
+            "CMAKE_SYSROOT:PATH" += "$path/x86_64-unknown-linux-gnu/sysroot"
+            val cFlags = "--gcc-toolchain=$path"
+            "CMAKE_C_FLAGS:STRING" += cFlags
+            "CMAKE_CXX_FLAGS:STRING" += cFlags
+        }
+        currentOs.isMacOsX -> {
+            "CMAKE_C_COMPILER:STRING" += "clang"
+            "CMAKE_CXX_COMPILER:STRING" += "clang++"
+            "CMAKE_C_FLAGS:STRING" += "-mmacosx-version-min=10.11"
+            "CMAKE_CXX_FLAGS:STRING" += "-mmacosx-version-min=10.11"
+        }
+        currentOs.isWindows -> {
+            val userHome = System.getProperty("user.home").replace('\\', '/')
+            val path = "$userHome/.konan/dependencies/msys2-mingw-w64-x86_64-clang-llvm-lld-compiler_rt-8.0.1"
+            "CMAKE_C_COMPILER:STRING" += "$path/bin/clang.exe"
+            "CMAKE_CXX_COMPILER:STRING" += "$path/bin/clang++.exe"
 
-    if (currentOs.isLinux) {
-        "CMAKE_SYSROOT:PATH" += "${System.getenv("HOME")}/.konan/dependencies/target-gcc-toolchain-3-linux-x86-64/x86_64-unknown-linux-gnu/sysroot"
-        "CMAKE_C_FLAGS:STRING" += "--gcc-toolchain=${System.getenv("HOME")}/.konan/dependencies/target-gcc-toolchain-3-linux-x86-64"
-        "CMAKE_CXX_FLAGS:STRING" += "--gcc-toolchain=${System.getenv("HOME")}/.konan/dependencies/target-gcc-toolchain-3-linux-x86-64"
-    } else if (currentOs.isMacOsX) {
-        "CMAKE_C_FLAGS:STRING" += "-mmacosx-version-min=10.11"
-        "CMAKE_CXX_FLAGS:STRING" += "-mmacosx-version-min=10.11"
+            "CMAKE_SYSROOT:PATH" += path
+
+            val cFlags = "-femulated-tls"
+            "CMAKE_C_FLAGS:STRING" += cFlags
+            "CMAKE_CXX_FLAGS:STRING" += "$cFlags -std=c++11"
+        }
     }
 }
 
@@ -153,14 +182,14 @@ if (withAndroid) {
             ?: throw IllegalStateException("Please install NDK")
 
     fun addAndroidTarget(target: String) {
-        val build = addTarget("android${target.capitalize()}") {
+        val build = addTarget("android-$target") {
             "CMAKE_TOOLCHAIN_FILE:PATH" += "${ndkDir.absolutePath}/build/cmake/android.toolchain.cmake"
             "ANDROID_NDK:PATH" += "${ndkDir.absolutePath}/"
             "ANDROID_PLATFORM:STRING" += "android-16"
             "ANDROID_ABI:STRING" += target
         }
 
-        tasks.maybeCreate("buildAndroidLeveldb").apply {
+        tasks.maybeCreate("buildAllAndroidLibs").apply {
             group = "build"
             dependsOn(build)
         }
@@ -172,25 +201,30 @@ if (withAndroid) {
     addAndroidTarget("x86_64")
 }
 
-if (currentOs.isMacOsX) {
-    fun addIosTarget(target: String) {
-        val build = addTarget("ios${target.capitalize()}") {
-            "G" -= "Xcode"
-            "CMAKE_TOOLCHAIN_FILE:PATH" += "${projectDir.absolutePath}/src/ios-cmake/ios.toolchain.cmake"
-            "PLATFORM:STRING" += target.toUpperCase()
-            "CMAKE_C_FLAGS:STRING" += "-Wno-shorten-64-to-32"
-            "CMAKE_CXX_FLAGS:STRING" += "-Wno-shorten-64-to-32"
-        }
-
-        tasks.maybeCreate("buildIosLeveldb").apply {
-            group = "build"
-            dependsOn(build)
-        }
+fun addIosTarget(target: String) {
+    val build = if (currentOs.isMacOsX) addTarget("ios-$target") {
+        "G" -= "Xcode"
+        "CMAKE_TOOLCHAIN_FILE:PATH" += "${projectDir.absolutePath}/src/ios-cmake/ios.toolchain.cmake"
+        "PLATFORM:STRING" += target.toUpperCase()
+        "CMAKE_C_FLAGS:STRING" += "-Wno-shorten-64-to-32"
+        "CMAKE_CXX_FLAGS:STRING" += "-Wno-shorten-64-to-32"
+    }
+    else task("buildIos-${target}Leveldb") {
+        enabled = false
     }
 
-    addIosTarget("os")
-    addIosTarget("simulator64")
+    tasks.maybeCreate("buildAllIosLibs").apply {
+        group = "build"
+        dependsOn(build)
+    }
 }
+
+addIosTarget("os")
+addIosTarget("simulator64")
+addIosTarget("watchos")
+addIosTarget("simulator_watchos")
+addIosTarget("tvos")
+addIosTarget("simulator_tvos")
 
 tasks.create<Delete>("clean") {
     delete(buildDir)

@@ -3,7 +3,7 @@ package org.kodein.db.impl.model
 import org.kodein.db.impl.model.jvm.AnnotationMetadataExtractor
 import org.kodein.db.model.Id
 import org.kodein.db.model.Indexed
-import org.kodein.db.model.orm.Serializer
+import org.kodein.db.model.orm.DefaultSerializer
 import org.kodein.db.orm.kryo.KryoSerializer
 import org.kodein.db.test.utils.assertBytesEquals
 import org.kodein.memory.io.KBuffer
@@ -11,25 +11,25 @@ import org.kodein.memory.io.array
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 @Suppress("ClassName")
 class ModelDBJvmTests_00_MetadataAnnotations : ModelDBTests() {
 
-    override fun testSerializer(): Serializer<Any> = KryoSerializer()
+    override fun testSerializer(): DefaultSerializer = KryoSerializer()
 
     @Test
     fun test00_MetadataAnnotations() {
         val adult = AAdult(42, "Salomon", "BRYS", Date(15, 12, 1986))
         val metadata = AnnotationMetadataExtractor().extractMetadata(adult)
-        assertBytesEquals(byteArrayOf(0, 0, 0, 42), KBuffer.array(metadata.id.size) { metadata.id.writeInto(this) })
+        assertEquals(42, metadata?.id)
     }
 
     class Test01()
 
     @Test
     fun test01_NoId() {
-        val ex = assertFailsWith<IllegalStateException> { AnnotationMetadataExtractor().extractMetadata(Test01()) }
-        assertEquals("class org.kodein.db.impl.model.ModelDBJvmTests_00_MetadataAnnotations\$Test01 has no @Id annotated field or method.", ex.message)
+        assertNull(AnnotationMetadataExtractor().extractMetadata(Test01()))
     }
 
     abstract class Test02_A {

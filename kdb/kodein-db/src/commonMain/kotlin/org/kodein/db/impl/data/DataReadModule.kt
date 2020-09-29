@@ -2,7 +2,7 @@ package org.kodein.db.impl.data
 
 import org.kodein.db.Options
 import org.kodein.db.Value
-import org.kodein.db.ascii.readAscii
+import org.kodein.db.ascii.getAscii
 import org.kodein.db.data.DataCursor
 import org.kodein.db.data.DataRead
 import org.kodein.db.leveldb.LevelDB
@@ -26,64 +26,61 @@ internal interface DataReadModule : DataKeyMakerModule, DataRead {
                 }
             }
 
-    override fun get(key: ReadBuffer, vararg options: Options.Read): Allocation? = ldb.get(key, toLdb(options))
+    override fun get(key: ReadMemory, vararg options: Options.Read): Allocation? = ldb.get(key, toLdb(options))
 
-    override fun findAll(vararg options: Options.Read): DataCursor = DataSimpleCursor(ldb.newCursor(toLdb(options)), objectEmptyPrefix.asManagedAllocation())
+    override fun findAll(vararg options: Options.Read): DataCursor = DataSimpleCursor(ldb, ldb.newCursor(toLdb(options)), emptyDocumentPrefix)
 
-    override fun findAllByType(type: String, vararg options: Options.Read): DataCursor {
-        Allocation.native(getObjectKeySize(type, null)) { putObjectKey(type, null) } .transfer { key ->
-            ldb.newCursor(toLdb(options)).transfer { cursor ->
-                return DataSimpleCursor(cursor, key)
-            }
+    override fun findAllByType(type: Int, vararg options: Options.Read): DataCursor {
+        val prefix = KBuffer.array(getDocumentKeySize(null)) { putDocumentKey(type, null) } .array
+        ldb.newCursor(toLdb(options)).transfer { cursor ->
+            return DataSimpleCursor(ldb, cursor, prefix)
         }
     }
 
-    override fun findById(type: String, id: Value, isOpen: Boolean, vararg options: Options.Read): DataCursor {
-        Allocation.native(getObjectKeySize(type, id, isOpen)) { putObjectKey(type, id, isOpen) } .transfer { key ->
-            ldb.newCursor(toLdb(options)).transfer { cursor ->
-                return DataSimpleCursor(cursor, key)
-            }
+    override fun findById(type: Int, id: Value, isOpen: Boolean, vararg options: Options.Read): DataCursor {
+        val prefix = KBuffer.array(getDocumentKeySize(id, isOpen)) { putDocumentKey(type, id, isOpen) } .array
+        ldb.newCursor(toLdb(options)).transfer { cursor ->
+            return DataSimpleCursor(ldb, cursor, prefix)
         }
     }
 
-    override fun findAllByIndex(type: String, index: String, vararg options: Options.Read): DataCursor {
+    override fun findAllByIndex(type: Int, index: String, vararg options: Options.Read): DataCursor {
         val ro = toLdb(options)
-        Allocation.native(getIndexKeyStartSize(type, index, null)) { putIndexKeyStart(type, index, null) } .transfer { key ->
-            ldb.newCursor(ro).transfer { cursor ->
-                return DataIndexCursor(ldb, cursor, key, ro)
-            }
+        val prefix = KBuffer.array(getIndexKeyStartSize(index, null)) { putIndexKeyStart(type, index, null) } .array
+        ldb.newCursor(ro).transfer { cursor ->
+            return DataIndexCursor(ldb, cursor, prefix, ro)
         }
+
     }
 
-    override fun findByIndex(type: String, index: String, value: Value, isOpen: Boolean, vararg options: Options.Read): DataCursor {
+    override fun findByIndex(type: Int, index: String, value: Value, isOpen: Boolean, vararg options: Options.Read): DataCursor {
         val ro = toLdb(options)
-        Allocation.native(getIndexKeyStartSize(type, index, value, isOpen)) { putIndexKeyStart(type, index, value, isOpen) } .transfer { key ->
-            ldb.newCursor(ro).transfer { cursor ->
-                return DataIndexCursor(ldb, cursor, key, ro)
-            }
+        val prefix = KBuffer.array(getIndexKeyStartSize(index, value, isOpen)) { putIndexKeyStart(type, index, value, isOpen) } .array
+        ldb.newCursor(ro).transfer { cursor ->
+            return DataIndexCursor(ldb, cursor, prefix, ro)
         }
     }
 
-    override fun getIndexesOf(key: ReadBuffer, vararg options: Options.Read): List<String> {
+    override fun getIndexesOf(key: ReadMemory, vararg options: Options.Read): Set<String> {
         val indexes = SliceBuilder.native(DataDBImpl.DEFAULT_CAPACITY).use {
-            val refKey = it.newSlice { putRefKeyFromObjectKey(key) }
-            ldb.get(refKey, toLdb(options)) ?: return emptyList()
+            val refKey = it.newSlice { putRefKeyFromDocumentKey(key) }
+            ldb.get(refKey, toLdb(options)) ?: return emptySet()
         }
 
-        val list = ArrayList<String>()
+        val set = HashSet<String>()
 
         indexes.use {
-            while (indexes.hasRemaining()) {
+            while (indexes.valid()) {
                 val length = indexes.readInt()
                 val indexKey = indexes.slice(indexes.position, length)
                 indexes.skip(length)
 
-                val type = getIndexKeyName(indexKey)
-                list.add(type.readAscii())
+                val name = getIndexKeyName(indexKey)
+                set.add(name.getAscii())
             }
         }
 
-        return list
+        return set
     }
 
 }

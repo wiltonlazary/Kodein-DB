@@ -17,8 +17,11 @@ kodein {
             target.setCompileClasspath()
         }
 
-        add(kodeinTargets.native.host)
-
-        add(kodeinTargets.native.allIos)
+        add(kodeinTargets.native.allDarwin + kodeinTargets.native.allDesktop)
     }
+}
+
+kodeinUpload {
+    name = "kodein-leveldb-api"
+    description = "LevelDB API library"
 }

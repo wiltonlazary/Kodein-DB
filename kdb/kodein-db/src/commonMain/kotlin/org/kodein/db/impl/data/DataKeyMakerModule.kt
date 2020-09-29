@@ -7,7 +7,7 @@ import org.kodein.memory.io.array
 
 internal interface DataKeyMakerModule : DataKeyMaker {
 
-    override fun newKey(type: String, id: Value): KBuffer =
-            KBuffer.array(getObjectKeySize(type, id)) { putObjectKey(type, id) }
+    override fun newKey(type: Int, id: Value): KBuffer =
+            KBuffer.array(getDocumentKeySize(id)) { putDocumentKey(type, id) }
 
 }

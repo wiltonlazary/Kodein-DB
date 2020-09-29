@@ -1,4 +1,5 @@
-#include <stdint.h>
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
+
 
 #include "kodein/org_kodein_db_leveldb_jni_Native.h"
 
@@ -8,21 +9,45 @@
 #include "leveldb/filter_policy.h"
 #include "leveldb/write_batch.h"
 
-#include <sstream>
-#include <ctime>
+#include <chrono>
 #include <iostream>
-#include <cstdio>
+
+
+# if defined(__linux__) || defined(__CYGWIN__)
+# 	include <endian.h>
+# elif defined(__APPLE__)
+#     include <libkern/OSByteOrder.h>
+#     define htobe32(x) OSSwapHostToBigInt32(x)
+# elif defined(__OpenBSD__) || defined(__NetBSD__) || defined(__FreeBSD__) || defined(__DragonFly__)
+#     include <sys/endian.h>
+# elif defined(_WIN16) || defined(_WIN32) || defined(_WIN64) || defined(__WINDOWS__)
+#     include <windows.h>
+#     if BYTE_ORDER == LITTLE_ENDIAN
+#         if defined(_MSC_VER)
+#             include <stdlib.h>
+#             define htobe32(x) _byteswap_ulong(x)
+#         elif defined(__GNUC__) || defined(__clang__)
+#             define htobe32(x) __builtin_bswap32(x)
+#         else
+#             error platform not supported
+#         endif
+# 	 else
+#         define htobe32(x) (x)
+#     endif
+# else
+#     error platform not supported
+# endif
 
 
 static jclass LevelDBExceptionClass;
 
-class PrintLogger : public leveldb::Logger {
-    void Logv(const char* format, va_list ap);
-};
-
-void PrintLogger::Logv(const char* format, va_list ap) {
-    vprintf(format, ap);
-}
+//class PrintLogger : public leveldb::Logger {
+//    void Logv(const char* format, va_list ap) final;
+//};
+//
+//void PrintLogger::Logv(const char* format, va_list ap) {
+//    vprintf(format, ap);
+//}
 
 //extern "C" leveldb::Logger *soberLogger();
 
@@ -32,13 +57,13 @@ void throwLevelDBExceptionFromMessage(JNIEnv *env, const std::string &message) {
 	env->ThrowNew(LevelDBExceptionClass, message.c_str());
 }
 
-void throwLevelDBExceptionFromStatus(JNIEnv *env, leveldb::Status status) {
+void throwLevelDBExceptionFromStatus(JNIEnv *env, const leveldb::Status &status) {
 	throwLevelDBExceptionFromMessage(env, status.ToString());
 }
 
 char *getAsciiString(JNIEnv *env, jstring jstr) {
 	int length = env->GetStringLength(jstr);
-	const jchar *chars = env->GetStringCritical(jstr, 0);
+	const jchar *chars = env->GetStringCritical(jstr, nullptr);
 	char *str = new char[length + 1];
 	for (int i = 0; i < length; ++i)
 		str[i] = (char) chars[i];
@@ -55,22 +80,22 @@ class Bytes {
 
     static jbyte *getAddr(JNIEnv *env, jbyteArray array, bool sync) {
         if (sync)
-            return env->GetByteArrayElements(array, 0);
+            return env->GetByteArrayElements(array, nullptr);
         else
-            return (jbyte *) env->GetPrimitiveArrayCritical(array, 0);
+            return (jbyte *) env->GetPrimitiveArrayCritical(array, nullptr);
     }
 
 public:
     leveldb::Slice slice;
 
-    Bytes(JNIEnv *env, jobject buffer, jint offset, jint len, bool sync) : env(0), array(0), addr(0), sync(sync), slice(leveldb::Slice(((char *) env->GetDirectBufferAddress(buffer)) + offset, len)) {}
+    Bytes(JNIEnv *env, jobject buffer, jint offset, jint len, bool sync) : env(nullptr), array(nullptr), addr(nullptr), sync(sync), slice(leveldb::Slice(((char *) env->GetDirectBufferAddress(buffer)) + offset, len)) {}
 
     Bytes(JNIEnv *env, jbyteArray array, jbyte *addr, jint offset, jint len, bool sync) : env(env), array(array), addr(addr), sync(sync), slice(leveldb::Slice(((char *) addr) + offset, len)) {}
 
     Bytes(JNIEnv *env, jbyteArray array, jint offset, jint len, bool sync) : Bytes(env, array, getAddr(env, array, sync), offset, len, sync) {}
 
     ~Bytes() {
-        if (env == 0 || array == 0 || addr == 0)
+        if (env == nullptr || array == nullptr || addr == nullptr)
             return ;
         if (sync)
             env->ReleaseByteArrayElements(array, addr, JNI_ABORT);
@@ -78,10 +103,8 @@ public:
             env->ReleasePrimitiveArrayCritical(array, addr, JNI_ABORT);
     }
 
-    Bytes(Bytes &&bytes) : env(bytes.env), array(bytes.array), addr(bytes.addr), sync(bytes.sync), slice(std::move(bytes.slice)) {}
-
-private:
-    Bytes(const Bytes &bytes) {}
+    Bytes(Bytes &&bytes) noexcept : env(bytes.env), array(bytes.array), addr(bytes.addr), sync(bytes.sync), slice(bytes.slice) {}
+    Bytes(const Bytes &bytes) = delete;
 };
 
 #define _BYTES(b, s)    Bytes(env, b ## Bytes, b ## Offset, b ## Len, s)
@@ -96,7 +119,7 @@ private:
                               }
 
 #define PTR(t, n)     reinterpret_cast<t*>(n ## Ptr)
-#define CAST(t, n)    t *n = PTR(t, n)
+#define CAST(t, n)    auto *n = PTR(t, n)
 
 leveldb::WriteOptions _writeOptions(jboolean sync) {
 	leveldb::WriteOptions options;
@@ -120,7 +143,6 @@ leveldb::ReadOptions _readOptions(jboolean verifyChecksum, jboolean fillCache, j
                              }
 
 extern "C" {
-
 
 ////////////////////////////////////////// JNI (UN)LOAD //////////////////////////////////////////
 
@@ -180,10 +202,10 @@ JNIEXPORT jlong JNICALL Java_org_kodein_db_leveldb_jni_Native_optionsNew (JNIEnv
     jboolean reuseLogs,
     jint bloomFilterBitsPerKey
     ) {
-    leveldb::Options *options = new leveldb::Options();
+    auto *options = new leveldb::Options();
 
     // TODO
-    options->info_log = NULL; //printLogs ? new PrintLogger() : NULL;
+    options->info_log = nullptr; //printLogs ? new PrintLogger() : NULL;
     options->create_if_missing = createIfMissing;
     options->error_if_exists = errorIfExists;
     options->paranoid_checks = paranoidChecks;
@@ -195,7 +217,7 @@ JNIEXPORT jlong JNICALL Java_org_kodein_db_leveldb_jni_Native_optionsNew (JNIEnv
     options->max_file_size = maxFileSize;
     options->compression = snappyCompression ? leveldb::kSnappyCompression : leveldb::kNoCompression;
     options->reuse_logs = reuseLogs;
-    options->filter_policy = (bloomFilterBitsPerKey <= 0) ? NULL : leveldb::NewBloomFilterPolicy(bloomFilterBitsPerKey);
+    options->filter_policy = (bloomFilterBitsPerKey <= 0) ? nullptr : leveldb::NewBloomFilterPolicy(bloomFilterBitsPerKey);
 
     return (jlong) options;
 }
@@ -203,14 +225,11 @@ JNIEXPORT jlong JNICALL Java_org_kodein_db_leveldb_jni_Native_optionsNew (JNIEnv
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_optionsRelease (JNIEnv *env, jclass, jlong optionsPtr) {
     CAST(leveldb::Options, options);
 
-    if (options->info_log != NULL)
-        delete options->info_log;
+    delete options->info_log;
 
-    if (options->block_cache != NULL)
-        delete options->block_cache;
+    delete options->block_cache;
 
-    if (options->filter_policy != NULL)
-        delete options->filter_policy;
+    delete options->filter_policy;
 
     delete options;
 }
@@ -223,7 +242,7 @@ JNIEXPORT jlong JNICALL Java_org_kodein_db_leveldb_jni_Native_dbOpen (JNIEnv *en
 
 	const char *path = getAsciiString(env, jpath);
 
-	leveldb::DB *ldb = 0;
+	leveldb::DB *ldb = nullptr;
 
 	leveldb::Status status = leveldb::DB::Open(*options, path, &ldb);
 
@@ -256,13 +275,13 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_dbDestroy (JNIEnv *
     leveldb::Status s = leveldb::DestroyDB(path, *options);
     delete[] path;
 
-	CHECK_STATUS(s,);
+	CHECK_STATUS(s,) // NOLINT(performance-unnecessary-copy-initialization)
 }
 
-void J_LevelDBJNI_Put (JNIEnv *env, jlong ldbPtr, Bytes key, Bytes value, jboolean sync) {
+void J_LevelDBJNI_Put (JNIEnv *env, jlong ldbPtr, Bytes &&key, Bytes &&value, jboolean sync) {
     CAST(leveldb::DB, ldb);
 
-    CHECK_STATUS(ldb->Put(_writeOptions(sync), key.slice, value.slice),);
+    CHECK_STATUS(ldb->Put(_writeOptions(sync), key.slice, value.slice),)
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putBB (JNIEnv *env, jclass, jlong ldbPtr, jobject keyBytes, jint keyOffset, jint keyLen, jobject valueBytes, jint valueOffset, jint valueLen, jboolean sync) {
@@ -270,11 +289,17 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putBB (JNIEnv *env,
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putAB (JNIEnv *env, jclass, jlong ldbPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen, jobject valueBytes, jint valueOffset, jint valueLen, jboolean sync) {
-    J_LevelDBJNI_Put(env, ldbPtr, BYTES(key), BYTES(value), sync);
+    // Order matters!
+    auto value = BYTES(value);
+    auto key = BYTES(key);
+    J_LevelDBJNI_Put(env, ldbPtr, std::move(key), std::move(value), sync);
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putBA (JNIEnv *env, jclass, jlong ldbPtr, jobject keyBytes, jint keyOffset, jint keyLen, jbyteArray valueBytes, jint valueOffset, jint valueLen, jboolean sync) {
-    J_LevelDBJNI_Put(env, ldbPtr, BYTES(key), BYTES(value), sync);
+    // Order matters!
+    auto key = BYTES(key);
+    auto value = BYTES(value);
+    J_LevelDBJNI_Put(env, ldbPtr, std::move(key), std::move(value), sync);
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putAA (JNIEnv *env, jclass, jlong ldbPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen, jbyteArray valueBytes, jint valueOffset, jint valueLen, jboolean sync) {
@@ -284,7 +309,7 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_putAA (JNIEnv *env,
 void J_LevelDBJNI_Delete (JNIEnv *env, jlong ldbPtr, Bytes key, jboolean sync) {
     CAST(leveldb::DB, ldb);
 
-    CHECK_STATUS(ldb->Delete(_writeOptions(sync), key.slice),);
+    CHECK_STATUS(ldb->Delete(_writeOptions(sync), key.slice),)
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_deleteB (JNIEnv *env, jclass, jlong ldbPtr, jobject keyBytes, jint keyOffset, jint keyLen, jboolean sync) {
@@ -299,11 +324,11 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_write (JNIEnv *env,
     CAST(leveldb::DB, ldb);
     CAST(leveldb::WriteBatch, batch);
 
-    CHECK_STATUS(ldb->Write(_writeOptions(sync), batch),);
+    CHECK_STATUS(ldb->Write(_writeOptions(sync), batch),)
 }
 
 jlong LevelDBJNI_Get (JNIEnv *env, leveldb::DB* ldb, const leveldb::Slice &key, const leveldb::ReadOptions &options) {
-	std::string *value = new std::string;
+	auto *value = new std::string;
 	leveldb::Status status = ldb->Get(options, key, value);
 
 	if (!status.ok() && !status.IsNotFound()) {
@@ -365,7 +390,7 @@ JNIEXPORT jlong JNICALL Java_org_kodein_db_leveldb_jni_Native_indirectGetI (JNIE
     CAST(leveldb::DB, ldb);
     CAST(leveldb::Iterator, it);
 
-	CHECK_IT_VALID(0);
+	CHECK_IT_VALID(0)
 
     return LevelDBJNI_Get(env, ldb, it->value(), _readOptions(verifyChecksum, fillCache, snapshotPtr));
 }
@@ -385,86 +410,119 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorRelease (JN
 	delete it;
 }
 
-JNIEXPORT jboolean JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorValid (JNIEnv *env, jclass, jlong itPtr) {
-    CAST(leveldb::Iterator, it);
+//JNIEXPORT jboolean JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorValid (JNIEnv *env, jclass, jlong itPtr) {
+//    CAST(leveldb::Iterator, it);
+//
+//	return it->Valid();
+//}
 
-	return it->Valid();
+void putLens(JNIEnv *env, leveldb::Iterator *it, jintArray lens) {
+    bool valid = it->Valid();
+
+    auto ints = (jint *) env->GetPrimitiveArrayCritical(lens, nullptr);
+    ints[0] = valid ? (int) it->key().size() : -1;
+    ints[1] = valid ? (int) it->value().size() : -1;
+    env->ReleasePrimitiveArrayCritical(lens, ints, 0);
 }
 
-JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekToFirst (JNIEnv *env, jclass, jlong itPtr) {
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekToFirst (JNIEnv *env, jclass, jlong itPtr, jintArray lens) {
     CAST(leveldb::Iterator, it);
 
 	it->SeekToFirst();
 
-    CHECK_STATUS(it->status(),);
+    CHECK_STATUS(it->status(), )
+
+    putLens(env, it, lens);
 }
 
-JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekToLast (JNIEnv *env, jclass, jlong itPtr) {
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekToLast (JNIEnv *env, jclass, jlong itPtr, jintArray lens) {
     CAST(leveldb::Iterator, it);
 
 	it->SeekToLast();
 
-    CHECK_STATUS(it->status(),);
+    CHECK_STATUS(it->status(), )
+
+    putLens(env, it, lens);
 }
 
-void J_LevelDBJNI_Iterator_Seek(JNIEnv *env, jlong itPtr, Bytes key) {
+void J_LevelDBJNI_Iterator_Seek(JNIEnv *env, jlong itPtr, Bytes key, jintArray lens) {
     CAST(leveldb::Iterator, it);
 
     it->Seek(key.slice);
 
-    CHECK_STATUS(it->status(),);
+    CHECK_STATUS(it->status(), )
+
+    putLens(env, it, lens);
 }
 
-JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekB (JNIEnv *env, jclass, jlong itPtr, jobject keyBytes, jint keyOffset, jint keyLen) {
-    J_LevelDBJNI_Iterator_Seek(env, itPtr, BYTES_S(key));
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekB (JNIEnv *env, jclass, jlong itPtr, jobject keyBytes, jint keyOffset, jint keyLen, jintArray lens) {
+    J_LevelDBJNI_Iterator_Seek(env, itPtr, BYTES_S(key), lens);
 }
 
-JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekA (JNIEnv *env, jclass, jlong itPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen) {
-    J_LevelDBJNI_Iterator_Seek(env, itPtr, BYTES_S(key));
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorSeekA (JNIEnv *env, jclass, jlong itPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen, jintArray lens) {
+    J_LevelDBJNI_Iterator_Seek(env, itPtr, BYTES_S(key), lens);
 }
 
-JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorNext (JNIEnv *env, jclass, jlong itPtr) {
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorNext (JNIEnv *env, jclass, jlong itPtr, jintArray lens) {
     CAST(leveldb::Iterator, it);
-
-	CHECK_IT_VALID();
 
 	it->Next();
 
-    CHECK_STATUS(it->status(),);
+    CHECK_STATUS(it->status(), )
+
+    putLens(env, it, lens);
 }
 
-JNIEXPORT void Java_org_kodein_db_leveldb_jni_Native_iteratorPrev (JNIEnv *env, jclass, jlong itPtr) {
+JNIEXPORT void Java_org_kodein_db_leveldb_jni_Native_iteratorPrev (JNIEnv *env, jclass, jlong itPtr, jintArray lens) {
     CAST(leveldb::Iterator, it);
-
-	CHECK_IT_VALID();
 
 	it->Prev();
 
-    CHECK_STATUS(it->status(),);
+    CHECK_STATUS(it->status(), )
+
+    putLens(env, it, lens);
 }
 
-JNIEXPORT jobject JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorKey (JNIEnv *env, jclass, jlong itPtr) {
+//jobject toBuffer(JNIEnv *env, leveldb::Slice slice, jobject buffer) {
+//    if (buffer == nullptr || (slice.size() + 4) > env->GetDirectBufferCapacity(buffer)) {
+//        if (buffer != nullptr) {
+//            delete[] (char *) env->GetDirectBufferAddress(buffer);
+//        }
+//        size_t cap = (((slice.size() + 4) / 1024) + 1) * 1024;
+//        buffer = env->NewDirectByteBuffer(new char[cap], cap);
+//    }
+//
+//    char *buf = (char *) env->GetDirectBufferAddress(buffer);
+//    *((int32_t *) buf) = htobe32(slice.size());
+//    memcpy((buf + 4), slice.data(), slice.size());
+//
+//    return buffer;
+//}
+
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorKey (JNIEnv *env, jclass, jlong itPtr, jobject buffer) {
     CAST(leveldb::Iterator, it);
 
-	CHECK_IT_VALID(0);
+//	CHECK_IT_VALID(nullptr)
 
 	leveldb::Slice key = it->key();
 
-    CHECK_STATUS(it->status(), 0);
+    memcpy(env->GetDirectBufferAddress(buffer), key.data(), key.size());
 
-	return env->NewDirectByteBuffer((void *) key.data(), key.size());
+//	return toBuffer(env, key, buffer);
+//	return env->NewDirectByteBuffer((void *) key.data(), key.size());
 }
 
-JNIEXPORT jobject JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorValue (JNIEnv *env, jclass, jlong itPtr) {
+JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_iteratorValue (JNIEnv *env, jclass, jlong itPtr, jobject buffer) {
     CAST(leveldb::Iterator, it);
 
-	CHECK_IT_VALID(0);
+//	CHECK_IT_VALID(nullptr)
 
 	leveldb::Slice value = it->value();
 
-    CHECK_STATUS(it->status(), 0);
+    memcpy(env->GetDirectBufferAddress(buffer), value.data(), value.size());
 
-	return env->NewDirectByteBuffer((void *) value.data(), value.size());
+//  return toBuffer(env, value, buffer);
+//	return env->NewDirectByteBuffer((void *) value.data(), value.size());
 }
 
 
@@ -496,7 +554,7 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchRelease (
 	delete batch;
 }
 
-void J_LevelDBJNI_WriteBatch_Put (jlong batchPtr, Bytes key, Bytes value) {
+void J_LevelDBJNI_WriteBatch_Put (jlong batchPtr, Bytes &&key, Bytes &&value) {
     CAST(leveldb::WriteBatch, batch);
 	batch->Put(key.slice, value.slice);
 }
@@ -506,11 +564,17 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchPutBB (JN
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchPutAB (JNIEnv *env, jclass, jlong batchPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen, jobject valueBytes, jint valueOffset, jint valueLen) {
-    J_LevelDBJNI_WriteBatch_Put(batchPtr, BYTES_A(key), BYTES_A(value));
+    // Order matters!
+    auto value = BYTES_A(value);
+    auto key = BYTES_A(key);
+    J_LevelDBJNI_WriteBatch_Put(batchPtr, std::move(key), std::move(value));
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchPutBA (JNIEnv *env, jclass, jlong batchPtr, jobject keyBytes, jint keyOffset, jint keyLen, jbyteArray valueBytes, jint valueOffset, jint valueLen) {
-    J_LevelDBJNI_WriteBatch_Put(batchPtr, BYTES_A(key), BYTES_A(value));
+    // Order matters!
+    auto key = BYTES_A(key);
+    auto value = BYTES_A(value);
+    J_LevelDBJNI_WriteBatch_Put(batchPtr, std::move(key), std::move(value));
 }
 
 JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchPutAA (JNIEnv *env, jclass, jlong batchPtr, jbyteArray keyBytes, jint keyOffset, jint keyLen, jbyteArray valueBytes, jint valueOffset, jint valueLen) {
@@ -543,7 +607,6 @@ JNIEXPORT void JNICALL Java_org_kodein_db_leveldb_jni_Native_writeBatchAppend (J
 
     batch->Append(*source);
 }
-
 
 
 } /* extern "C" */

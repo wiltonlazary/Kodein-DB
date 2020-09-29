@@ -2,11 +2,10 @@ plugins {
     id("org.kodein.root")
 }
 
-val kotlinxAtomicFuVer by extra { "0.14.1" } // CAUTION: also change in buildscript!
-val kotlinxSerializationVer by extra { "0.14.0" }
-val kotlinxCoroutinesVer by extra { "1.3.3" }
-val kodeinLogVer by extra { "0.1.0" }
-val kodeinMemoryVer by extra { "0.1.0" }
+val kotlinxAtomicFuVer by extra { "0.14.4" } // CAUTION: also change in buildscript!
+val kotlinxSerializationVer by extra { "1.0.0-RC" }
+val kodeinLogVer by extra { "0.5.0" }
+val kodeinMemoryVer by extra { "0.3.0" }
 
 buildscript {
     repositories {
@@ -14,18 +13,19 @@ buildscript {
     }
 
     dependencies {
-        classpath("org.jetbrains.kotlinx:atomicfu-gradle-plugin:0.14.1")
+        classpath("org.jetbrains.kotlinx:atomicfu-gradle-plugin:0.14.4")
     }
 }
 
 allprojects {
     group = "org.kodein.db"
-    version = "0.1.0"
+    version = "0.3.0-beta"
 
     repositories {
         mavenLocal()
         google()
         maven(url = "https://kotlin.bintray.com/kotlinx")
+        maven(url = "https://dl.bintray.com/kodein-framework/kodein-dev")
         jcenter()
     }
 }

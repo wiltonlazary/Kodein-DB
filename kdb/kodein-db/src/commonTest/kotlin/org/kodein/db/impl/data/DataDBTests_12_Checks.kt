@@ -14,7 +14,7 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test00_putOK() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
 
         ddb.put(key, Value.of(21))
         ddb.put(key, Value.of(42), emptySet(), Anticipate {
@@ -30,7 +30,7 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test01_putKO() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
 
         ddb.put(key, Value.of(21))
         assertFailsWith<IllegalStateException> {
@@ -48,7 +48,7 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test02_deleteOK() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
         ddb.put(key, Value.of(42))
 
         ddb.delete(key, Anticipate {
@@ -62,12 +62,12 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test03_deleteKO() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
         ddb.put(key, Value.of(42))
 
         assertFailsWith<IllegalStateException> {
             ddb.delete(key, Anticipate {
-                ddb.get(ddb.newKey("int", Value.ofAscii("test")))!!.use {
+                ddb.get(ddb.newKey(1, Value.ofAscii("test")))!!.use {
                     check(it.readInt() == 0)
                 }
             })
@@ -80,7 +80,7 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test04_batchOK() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
         ddb.put(key, Value.of(21))
 
         ddb.newBatch().use { batch ->
@@ -101,7 +101,7 @@ class DataDBTests_12_Checks : DataDBTests() {
 
     @Test
     fun test05_batchKO() {
-        val key = ddb.newKey("int", Value.ofAscii("test"))
+        val key = ddb.newKey(1, Value.ofAscii("test"))
         ddb.put(key, Value.of(21))
 
         ddb.newBatch().use { batch ->

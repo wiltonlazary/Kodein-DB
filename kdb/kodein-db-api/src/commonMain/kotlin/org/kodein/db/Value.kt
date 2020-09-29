@@ -5,11 +5,11 @@ import org.kodein.memory.io.*
 import org.kodein.memory.util.UUID
 import org.kodein.memory.util.putUUID
 
-interface Value : Body {
+public interface Value : Body {
 
-    val size: Int
+    public val size: Int
 
-    abstract class AbstractValue : Value {
+    public abstract class AbstractValue : Value {
 
         private var _hashCode = 0
 
@@ -42,12 +42,12 @@ interface Value : Body {
         }
     }
 
-    abstract class ZeroSpacedValues(private val _count: Int) : AbstractValue(), Value {
+    public abstract class ZeroSpacedValues(private val _count: Int) : AbstractValue(), Value {
 
         final override fun writeInto(dst: Writeable) {
             for (i in 0 until _count) {
                 if (i != 0)
-                    dst.put(0.toByte())
+                    dst.putByte(0.toByte())
                 write(dst, i)
             }
         }
@@ -63,14 +63,14 @@ interface Value : Body {
         protected abstract fun size(pos: Int): Int
     }
 
-    companion object {
+    public companion object {
 
-        val emptyValue: Value = object : Value {
+        public val emptyValue: Value = object : Value {
             override val size = 0
             override fun writeInto(dst: Writeable) {}
         }
 
-        fun of(vararg values: ByteArray): Value {
+        public fun of(vararg values: ByteArray): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putBytes(values[pos], 0, values[pos].size)
@@ -80,17 +80,17 @@ interface Value : Body {
             }
         }
 
-        fun of(vararg values: ReadBuffer): Value {
+        public fun of(vararg values: ReadBuffer): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putBytes(values[pos].duplicate())
                 }
-                override fun size(pos: Int) = values[pos].remaining
+                override fun size(pos: Int) = values[pos].available
                 override fun toString() = values.joinToString()
             }
         }
 
-        fun of(vararg values: Value): Value {
+        public fun of(vararg values: Value): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     val value = values[pos]
@@ -101,27 +101,27 @@ interface Value : Body {
             }
         }
 
-        fun of(vararg values: Boolean): Value {
+        public fun of(vararg values: Boolean): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
-                    dst.put((if (values[pos]) 1 else 0).toByte())
+                    dst.putByte((if (values[pos]) 1 else 0).toByte())
                 }
                 override fun size(pos: Int) = 1
                 override fun toString() = values.joinToString()
             }
         }
 
-        fun of(vararg values: Byte): Value {
+        public fun of(vararg values: Byte): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
-                    dst.put(values[pos])
+                    dst.putByte(values[pos])
                 }
                 override fun size(pos: Int) = 1
                 override fun toString() = values.joinToString()
             }
         }
 
-        fun of(vararg values: Short): Value {
+        public fun of(vararg values: Short): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putShort(values[pos])
@@ -131,7 +131,7 @@ interface Value : Body {
             }
         }
 
-        fun of(vararg values: Int): Value {
+        public fun of(vararg values: Int): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putInt(values[pos])
@@ -141,7 +141,7 @@ interface Value : Body {
             }
         }
 
-        fun of(vararg values: Long): Value {
+        public fun of(vararg values: Long): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putLong(values[pos])
@@ -151,7 +151,7 @@ interface Value : Body {
             }
         }
 
-        fun of(vararg values: UUID): Value {
+        public fun of(vararg values: UUID): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putUUID(values[pos])
@@ -161,10 +161,10 @@ interface Value : Body {
             }
         }
 
-        fun ofAscii(vararg values: Char): Value {
+        public fun ofAscii(vararg values: Char): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
-                    dst.put(values[pos].toByte())
+                    dst.putByte(values[pos].toByte())
                 }
                 override fun size(pos: Int) = 1
                 override fun toString() = values.joinToString()
@@ -172,7 +172,7 @@ interface Value : Body {
         }
 
 
-        fun ofAscii(vararg values: CharSequence): Value {
+        public fun ofAscii(vararg values: CharSequence): Value {
             return object : Value.ZeroSpacedValues(values.size) {
                 override fun write(dst: Writeable, pos: Int) {
                     dst.putAscii(values[pos])
@@ -182,7 +182,23 @@ interface Value : Body {
             }
         }
 
-        fun ofAll(vararg values: Any): Value {
+        private fun Any.toValue(): Value = when (this) {
+            is Value ->  this
+            is ByteArray -> of(this)
+            is ReadBuffer -> of(this)
+            is Allocation -> of(this)
+            is Boolean ->  of((if (this) 1 else 0).toByte())
+            is Byte ->  of(this)
+            is Char ->  ofAscii(this)
+            is Short ->  of(this)
+            is Int ->  of(this)
+            is Long ->  of(this)
+            is UUID -> of(this)
+            is String ->  ofAscii(this)
+            else -> throw IllegalArgumentException("invalid value: $this")
+        }
+
+        public fun ofAll(vararg values: Any): Value {
             if (values.isEmpty())
                 return emptyValue
 
@@ -190,24 +206,21 @@ interface Value : Body {
                 return values[0] as Value
 
             val sized = Array(values.size) {
-                when (val value = values[it]) {
-                    is Value ->  value
-                    is ByteArray -> of(value)
-                    is ReadBuffer -> of(value)
-                    is Allocation -> of(value)
-                    is Boolean ->  of((if (value) 1 else 0).toByte())
-                    is Byte ->  of(value)
-                    is Char ->  ofAscii(value)
-                    is Short ->  of(value)
-                    is Int ->  of(value)
-                    is Long ->  of(value)
-                    is UUID -> of(value)
-                    is String ->  ofAscii(value)
-                    else -> throw IllegalArgumentException("invalid value: $value")
-                }
+                values[it].toValue()
             }
 
             return of(*sized)
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        public fun ofAny(value: Any): Value = when (value) {
+            is Collection<*> ->
+                if (value.size == 1) value.requireNoNulls().first().toValue()
+                else ofAll(*value.toTypedArray().requireNoNulls())
+            is Array<*> ->
+                if (value.size == 1) (value as Array<Any?>).requireNoNulls().first().toValue()
+                else ofAll(*(value as Array<Any?>).requireNoNulls())
+            else -> value.toValue()
         }
     }
 

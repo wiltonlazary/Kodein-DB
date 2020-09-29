@@ -6,27 +6,19 @@ plugins {
 kodein {
     kotlin {
 
-        val kotlinxCoroutinesVer: String by rootProject.extra
         val kotlinxSerializationVer: String by rootProject.extra
 
         common.main.dependencies {
             api(project(":ldb:kodein-leveldb-api"))
-            api("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:$kotlinxCoroutinesVer")
-            compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$kotlinxSerializationVer")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$kotlinxSerializationVer")
         }
 
-        add(kodeinTargets.jvm.jvm) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVer")
-                compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$kotlinxSerializationVer")
-            }
-        }
-
-        add(listOf(kodeinTargets.native.host) + kodeinTargets.native.allIos) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-coroutines-core-native:$kotlinxCoroutinesVer")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:$kotlinxSerializationVer")
-            }
-        }
+        add(kodeinTargets.jvm.jvm)
+        add(kodeinTargets.native.allDarwin + kodeinTargets.native.allDesktop)
     }
+}
+
+kodeinUpload {
+    name = "kodein-db-api"
+    description = "Kodein-DB API library"
 }

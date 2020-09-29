@@ -5,9 +5,9 @@ import org.kodein.db.TypeTable
 import org.kodein.db.inDir
 import org.kodein.db.model.*
 import org.kodein.db.model.orm.MetadataExtractor
-import org.kodein.db.model.orm.Serializer
+import org.kodein.db.model.orm.DefaultSerializer
 import org.kodein.db.orm.kotlinx.KotlinxSerializer
-import org.kodein.db.test.utils.platformTmpPath
+import org.kodein.memory.file.FileSystem
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 
@@ -18,9 +18,9 @@ abstract class ModelDBTests {
 
     protected val mdb: ModelDB get() = _mdb!!
 
-    private val factory = ModelDB.default.inDir(platformTmpPath)
+    private val factory = ModelDB.default.inDir(FileSystem.tempDirectory.path)
 
-    open fun testSerializer(): Serializer<Any>? = KotlinxSerializer {
+    open fun testSerializer(): DefaultSerializer? = KotlinxSerializer {
         +Adult.serializer()
         +Child.serializer()
         +Location.serializer()
@@ -36,9 +36,9 @@ abstract class ModelDBTests {
 
     open fun newModelDB(): ModelDB {
         val options = ArrayList<Options.Open>()
-        testSerializer()?.let { options.add(DBSerializer(it)) }
-        testMetadataExtractor()?.let { options.add(DBMetadataExtractor(it)) }
-        testTypeTable()?.let { options.add(DBTypeTable(it)) }
+        testSerializer()?.let { options.add(it) }
+        testMetadataExtractor()?.let { options.add(it) }
+        testTypeTable()?.let { options.add(it) }
         testClassSerializers().forEach { options.add(it) }
 
         return factory.open("modeldb", *options.toTypedArray())

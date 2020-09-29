@@ -1,5 +1,6 @@
+import com.android.build.gradle.tasks.factory.AndroidUnitTest
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-import org.kodein.internal.gradle.KodeinMPPExtension
+import org.kodein.internal.gradle.KodeinMppExtension
 
 plugins {
     id("org.kodein.library.mpp-with-android")
@@ -29,6 +30,12 @@ kodeinAndroid {
     }
 }
 
+afterEvaluate {
+    tasks.withType<AndroidUnitTest>().all {
+        enabled = false
+    }
+}
+
 kodein {
     kotlin {
         common.main.dependencies {
@@ -43,19 +50,12 @@ kodein {
         add(kodeinTargets.jvm.android)
 
         add(kodeinTargets.jvm.jvm) {
-            (tasks[mainCompilation.processResourcesTaskName] as ProcessResources).apply {
-                dependsOn(
-                        project(":ldb:jni").tasks["linkRelease"],
-                        project(":ldb:jni").tasks["genInfoRelease"]
-                )
-                from(
-                        project(":ldb:jni").tasks["linkRelease"].outputs,
-                        project(":ldb:jni").tasks["genInfoRelease"].outputs
-                )
+            test.dependencies {
+                implementation(project(":ldb:kodein-leveldb-jni"))
             }
         }
 
-        fun KodeinMPPExtension.TargetBuilder<KotlinNativeTarget>.configureCInterop(compilation: String) {
+        fun KodeinMppExtension.TargetBuilder<KotlinNativeTarget>.configureCInterop(compilation: String) {
             mainCompilation.cinterops.create("libleveldb") {
                 packageName("org.kodein.db.libleveldb")
 
@@ -70,7 +70,7 @@ kodein {
                 }
             }
 
-            // https://github.com/JetBrains/kotlin-native/issues/2314
+//            // https://github.com/JetBrains/kotlin-native/issues/2314
             mainCompilation.kotlinOptions.freeCompilerArgs = listOf(
                     "-include-binary", "${project(":ldb:lib").buildDir}/out/$compilation/lib/libleveldb.a",
                     "-include-binary", "${project(":ldb:lib").buildDir}/out/$compilation/lib/libcrc32c.a",
@@ -81,18 +81,32 @@ kodein {
             tasks[mainCompilation.compileAllTaskName].dependsOn(project(":ldb:lib").tasks["build${compilation.capitalize()}Leveldb"])
         }
 
-        add(kodeinTargets.native.host) {
+        add(kodeinTargets.native.allDesktop) {
             configureCInterop("konan")
         }
 
-        if (currentOs.isMacOsX) {
-            add(listOf(kodeinTargets.native.iosArm32, kodeinTargets.native.iosArm64)) {
-                configureCInterop("iosOs")
-            }
+        add(listOf(kodeinTargets.native.iosArm32, kodeinTargets.native.iosArm64)) {
+            configureCInterop("ios-os")
+        }
 
-            add(kodeinTargets.native.iosX64) {
-                configureCInterop("iosSimulator64")
-            }
+        add(kodeinTargets.native.iosX64) {
+            configureCInterop("ios-simulator64")
+        }
+
+        add(listOf(kodeinTargets.native.watchosArm32, kodeinTargets.native.watchosArm64)) {
+            configureCInterop("ios-watchos")
+        }
+
+        add(kodeinTargets.native.watchosX86) {
+            configureCInterop("ios-simulator_watchos")
+        }
+
+        add(kodeinTargets.native.tvosArm64) {
+            configureCInterop("ios-tvos")
+        }
+
+        add(kodeinTargets.native.tvosX64) {
+            configureCInterop("ios-simulator_tvos")
         }
 
     }
@@ -102,9 +116,18 @@ if (kodeinAndroid.isIncluded) {
     afterEvaluate {
         configure(listOf("Debug", "Release").map { tasks["externalNativeBuild$it"] }) {
             dependsOn(
-                    project(":ldb:lib").tasks["buildAndroidLeveldb"],
+                    project(":ldb:lib").tasks["buildAllAndroidLibs"],
                     project(":ldb:jni").tasks["generateJniHeaders"]
             )
         }
     }
+}
+
+(tasks.findByName("linkDebugTestMingwX64") as org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink?)?.apply {
+    this.binary.linkerOpts.addAll(listOf("--verbose", "-femulated-tls"))
+}
+
+kodeinUpload {
+    name = "kodein-leveldb"
+    description = "LevelDB JNI and K/N implementation library"
 }

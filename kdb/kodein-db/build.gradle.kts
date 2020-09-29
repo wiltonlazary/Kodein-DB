@@ -1,3 +1,5 @@
+import com.android.build.gradle.tasks.factory.AndroidUnitTest
+
 plugins {
     id("org.kodein.library.mpp-with-android")
     id("kotlinx-serialization")
@@ -10,53 +12,49 @@ atomicfu {
     dependenciesVersion = null
 }
 
+afterEvaluate {
+    tasks.withType<AndroidUnitTest>().all {
+        enabled = false
+    }
+}
+
 kodein {
     kotlin {
+
+        val kotlinxSerializationVer: String by rootProject.extra
 
         common {
             main.dependencies {
                 api(project(":kdb:kodein-db-api"))
                 api(project(":ldb:kodein-leveldb"))
-                implementation("org.jetbrains.kotlinx:atomicfu-common:$kotlinxAtomicFuVer")
+                implementation("org.jetbrains.kotlinx:atomicfu:$kotlinxAtomicFuVer")
             }
 
             test.dependencies {
                 implementation(project(":test-utils"))
                 implementation(project(":kdb:serializer:kodein-db-serializer-kotlinx"))
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$kotlinxSerializationVer")
             }
         }
 
         add(kodeinTargets.jvm.jvm) {
-            main.dependencies {
-                implementation("org.jetbrains.kotlinx:atomicfu:$kotlinxAtomicFuVer")
-            }
-
             test.dependencies {
                 implementation(project(":kdb:serializer:kodein-db-serializer-kryo-jvm"))
-                implementation("org.xerial:sqlite-jdbc:3.28.0")
+                implementation(project(":ldb:kodein-leveldb-jni"))
             }
         }
 
         add(kodeinTargets.jvm.android) {
-            main.dependencies {
-                implementation("org.jetbrains.kotlinx:atomicfu:$kotlinxAtomicFuVer")
-            }
-
             test.dependencies {
                 implementation(project(":kdb:serializer:kodein-db-serializer-kryo-jvm"))
             }
         }
 
-        add(kodeinTargets.native.host) {
-            main.dependencies {
-                implementation("org.jetbrains.kotlinx:atomicfu-native:$kotlinxAtomicFuVer")
-            }
-        }
-
-        add(kodeinTargets.native.allIos) {
-            main.dependencies {
-                implementation("org.jetbrains.kotlinx:atomicfu-native:$kotlinxAtomicFuVer")
-            }
-        }
+        add(kodeinTargets.native.allDarwin + kodeinTargets.native.allDesktop)
     }
+}
+
+kodeinUpload {
+    name = "kodein-db"
+    description = "Kodein-DB implementation library"
 }

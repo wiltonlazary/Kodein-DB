@@ -2,16 +2,8 @@ package org.kodein.db
 
 import org.kodein.memory.io.Writeable
 
-interface Body {
+public fun interface Body {
 
-    fun writeInto(dst: Writeable)
-
-    companion object {
-
-        inline operator fun invoke(crossinline block: (Writeable) -> Unit) = object : Body {
-            override fun writeInto(dst: Writeable) = block(dst)
-        }
-
-    }
+    public fun writeInto(dst: Writeable)
 
 }

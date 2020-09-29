@@ -1,17 +1,17 @@
 package org.kodein.db.ascii
 
-import org.kodein.memory.io.Readable
+import org.kodein.memory.io.ReadMemory
 import org.kodein.memory.io.Writeable
 
 
-fun Writeable.putAscii(str: CharSequence) {
+public fun Writeable.putAscii(str: CharSequence) {
     for (char in str)
-        put(char.toByte())
+        putByte(char.toByte())
 }
 
-fun Readable.readAscii(size: Int = remaining): String {
+public fun ReadMemory.getAscii(start: Int = 0, size: Int = limit - start): String {
     val array = CharArray(size)
     for (i in 0 until size)
-        array[i] = read().toChar()
+        array[i] = get(start + i).toChar()
     return String(array)
 }

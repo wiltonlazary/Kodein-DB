@@ -2,7 +2,6 @@ package org.kodein.db.impl.model.jvm
 
 import org.kodein.db.Index
 import org.kodein.db.Options
-import org.kodein.db.Value
 import org.kodein.db.model.Id
 import org.kodein.db.model.Indexed
 import org.kodein.db.model.orm.Metadata
@@ -11,24 +10,13 @@ import java.lang.reflect.Field
 import java.lang.reflect.Member
 import java.lang.reflect.Method
 
-class AnnotationMetadataExtractor : MetadataExtractor {
+public class AnnotationMetadataExtractor : MetadataExtractor {
 
     private sealed class ValueGetter {
 
         abstract val member: Member
 
-        protected abstract fun result(model: Any): Any?
-
-        fun get(model: Any): Value? {
-            val res = result(model) ?: return null
-
-            if (res is Collection<*>) {
-                @Suppress("UNCHECKED_CAST")
-                return Value.ofAll(*(res.toTypedArray().requireNoNulls()))
-            } else {
-                return Value.ofAll(res)
-            }
-        }
+        abstract fun get(model: Any): Any?
 
         class OfMethod(override val member: Method) : ValueGetter() {
             init {
@@ -36,17 +24,17 @@ class AnnotationMetadataExtractor : MetadataExtractor {
                     error("@Id or @Indexed annotated methods must have no argument")
             }
 
-            override fun result(model: Any): Any? = member.invoke(model)
+            override fun get(model: Any): Any? = member.invoke(model)
         }
 
         class OfField(override val member: Field) : ValueGetter() {
-            override fun result(model: Any): Any? {
-                val wasAcessible = member.isAccessible
-                if (!wasAcessible) member.isAccessible = true
+            override fun get(model: Any): Any? {
+                @Suppress("DEPRECATION") val wasAccessible = member.isAccessible
+                if (!wasAccessible) member.isAccessible = true
                 try {
                     return member.get(model)
                 } finally {
-                    if (!wasAcessible) member.isAccessible = false
+                    if (!wasAccessible) member.isAccessible = false
                 }
             }
         }
@@ -115,11 +103,11 @@ class AnnotationMetadataExtractor : MetadataExtractor {
         return getters
     }
 
-    override fun extractMetadata(model: Any, vararg options: Options.Write): Metadata {
+    override fun extractMetadata(model: Any, vararg options: Options.Write): Metadata? {
         val type = model.javaClass
         val getters = type.getters()
 
-        getters.id ?: error("${type} has no @Id annotated field or method.")
+        getters.id ?: return null
         val id = getters.id.get(model) ?: error("Id cannot be null in $model")
         val indexes = getters.indexes.mapNotNullTo(HashSet()) { entry -> entry.value.get(model)?.let { Index(entry.key, it) } }
 

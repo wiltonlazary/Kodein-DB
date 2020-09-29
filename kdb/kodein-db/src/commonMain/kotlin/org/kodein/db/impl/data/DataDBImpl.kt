@@ -10,12 +10,13 @@ import org.kodein.db.impl.utils.putBody
 import org.kodein.db.impl.utils.withLock
 import org.kodein.db.leveldb.LevelDB
 import org.kodein.memory.io.ReadBuffer
+import org.kodein.memory.io.ReadMemory
 import org.kodein.memory.io.SliceBuilder
-import org.kodein.memory.io.hasRemaining
 import org.kodein.memory.use
 import org.kodein.memory.util.forEachResilient
 
 internal class DataDBImpl(override val ldb: LevelDB) : DataReadModule, DataDB {
+
     override val snapshot: LevelDB.Snapshot? get() = null
 
     internal val lock = newLock()
@@ -35,7 +36,7 @@ internal class DataDBImpl(override val ldb: LevelDB) : DataReadModule, DataDB {
         val indexes = ldb.get(refKey) ?: return
 
         indexes.use {
-            while (indexes.hasRemaining()) {
+            while (indexes.valid()) {
                 val len = indexes.readInt()
                 val indexKey = indexes.slice(indexes.position, len)
                 batch.delete(indexKey)
@@ -46,15 +47,16 @@ internal class DataDBImpl(override val ldb: LevelDB) : DataReadModule, DataDB {
         batch.delete(refKey)
     }
 
-    internal fun putIndexesInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadBuffer, refKey: ReadBuffer, indexes: Set<Index>) {
+    internal fun putIndexesInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadMemory, refKey: ReadBuffer, indexes: Set<Index>) {
         if (indexes.isEmpty())
             return
 
         val ref = sb.newSlice {
             for (index in indexes) {
-                val indexKeySize = getIndexKeySize(key, index.index, index.value)
+                val indexValue = Value.ofAny(index.value)
+                val indexKeySize = getIndexKeySize(key, index.name, indexValue)
                 putInt(indexKeySize)
-                val indexKey = subSlice { putIndexKey(key, index.index, index.value) }
+                val indexKey = subSlice { putIndexKey(key, index.name, indexValue) }
                 batch.put(indexKey, key)
             }
         }
@@ -62,9 +64,9 @@ internal class DataDBImpl(override val ldb: LevelDB) : DataReadModule, DataDB {
         batch.put(refKey, ref)
     }
 
-    private fun putInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadBuffer, body: Body, indexes: Set<Index>): Int {
+    private fun putInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadMemory, body: Body, indexes: Set<Index>): Int {
         val refKey = sb.newSlice {
-            putRefKeyFromObjectKey(key)
+            putRefKeyFromDocumentKey(key)
         }
 
         deleteIndexesInBatch(batch, refKey)
@@ -73,43 +75,40 @@ internal class DataDBImpl(override val ldb: LevelDB) : DataReadModule, DataDB {
         val value = sb.newSlice { putBody(body) }
         batch.put(key, value)
 
-        return value.remaining
+        return value.available
     }
 
-    private fun put(sb: SliceBuilder, key: ReadBuffer, body: Body, indexes: Set<Index>, vararg options: Options.Write): Int {
-        val checks = options.all<Anticipate>()
-        val reacts = options.all<React>()
+    override fun put(key: ReadMemory, body: Body, indexes: Set<Index>, vararg options: Options.Write): Int {
+        key.verifyDocumentKey()
+        SliceBuilder.native(DEFAULT_CAPACITY).use { sb ->
+            val checks = options.all<Anticipate>()
+            val reacts = options.all<React>()
 
-        checks.filter { it.needsLock.not() } .forEach { it.block() }
-        val length = ldb.newWriteBatch().use { batch ->
-            lock.withLock {
-                checks.filter { it.needsLock } .forEach { it.block() }
-                val length = putInBatch(sb, batch, key, body, indexes)
-                ldb.write(batch, toLdb(options))
-                reacts.filter { it.needsLock } .forEachResilient { it.block(length) }
-                length
+            checks.filter { it.needsLock.not() } .forEach { it.block() }
+            val length = ldb.newWriteBatch().use { batch ->
+                lock.withLock {
+                    checks.filter { it.needsLock } .forEach { it.block() }
+                    val length = putInBatch(sb, batch, key, body, indexes)
+                    ldb.write(batch, toLdb(options))
+                    reacts.filter { it.needsLock } .forEachResilient { it.block(length) }
+                    length
+                }
             }
-        }
-        reacts.filter { it.needsLock.not() } .forEachResilient { it.block(length) }
-        return length
-    }
-
-    override fun put(key: ReadBuffer, body: Body, indexes: Set<Index>, vararg options: Options.Write): Int {
-        key.verifyObjectKey()
-        SliceBuilder.native(DEFAULT_CAPACITY).use {
-            return put(it, key, body, indexes, *options)
+            reacts.filter { it.needsLock.not() } .forEachResilient { it.block(length) }
+            return length
+//            return put(it, key, body, indexes, *options)
         }
     }
 
-    private fun deleteInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadBuffer) {
-        val refKey = sb.newSlice { putRefKeyFromObjectKey(key) }
+    private fun deleteInBatch(sb: SliceBuilder, batch: LevelDB.WriteBatch, key: ReadMemory) {
+        val refKey = sb.newSlice { putRefKeyFromDocumentKey(key) }
 
         deleteIndexesInBatch(batch, refKey)
         batch.delete(key)
     }
 
-    override fun delete(key: ReadBuffer, vararg options: Options.Write) {
-        key.verifyObjectKey()
+    override fun delete(key: ReadMemory, vararg options: Options.Write) {
+        key.verifyDocumentKey()
         val checks = options.all<Anticipate>()
         val reacts = options.all<React>()
 

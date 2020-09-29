@@ -1,8 +1,12 @@
 package org.kodein.db.impl
 
-import org.kodein.db.*
+import org.kodein.db.delete
+import org.kodein.db.execBatch
 import org.kodein.db.impl.model.Adult
 import org.kodein.db.impl.model.Person
+import org.kodein.db.on
+import org.kodein.db.test.utils.assertBytesEquals
+import org.kodein.memory.text.toAsciiBytes
 import kotlin.test.*
 
 @Suppress("ClassName")
@@ -14,7 +18,7 @@ open class DBTests_03_Listeners : DBTests() {
             var wCounter = 0
             var dCounter = 0
             willPut {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (wCounter++) {
                     0 -> {
                         assertEquals(0, dCounter)
@@ -29,7 +33,7 @@ open class DBTests_03_Listeners : DBTests() {
             }
             willDelete { fail() }
             didPut {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (dCounter++) {
                     0 -> {
                         assertEquals(1, wCounter)
@@ -57,7 +61,7 @@ open class DBTests_03_Listeners : DBTests() {
             var dCounter = 0
             willPut { fail() }
             willDelete {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (wCounter++) {
                     0 -> {
                         assertEquals(0, dCounter)
@@ -70,7 +74,7 @@ open class DBTests_03_Listeners : DBTests() {
             }
             didPut { fail() }
             didDelete {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (dCounter++) {
                     0 -> {
                         assertEquals(1, wCounter)
@@ -83,8 +87,8 @@ open class DBTests_03_Listeners : DBTests() {
             }
         }
 
-        db.delete(db.newKeyFrom(Models.salomon))
-        db.delete(db.newKeyFrom(Models.laila))
+        db.delete(db.keyFrom(Models.salomon))
+        db.delete(db.keyFrom(Models.laila))
     }
 
     @Test
@@ -96,7 +100,7 @@ open class DBTests_03_Listeners : DBTests() {
             var dCounter = 0
             willPut { fail() }
             willDeleteIt {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (wCounter++) {
                     0 -> {
                         assertEquals(0, dCounter)
@@ -111,7 +115,7 @@ open class DBTests_03_Listeners : DBTests() {
             }
             didPut { fail() }
             didDeleteIt {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (dCounter++) {
                     0 -> {
                         assertEquals(1, wCounter)
@@ -126,8 +130,8 @@ open class DBTests_03_Listeners : DBTests() {
             }
         }
 
-        db.delete(db.newKeyFrom(Models.salomon))
-        db.delete(db.newKeyFrom(Models.laila))
+        db.delete(db.keyFrom(Models.salomon))
+        db.delete(db.keyFrom(Models.laila))
     }
 
     @Test
@@ -139,7 +143,7 @@ open class DBTests_03_Listeners : DBTests() {
             var wCounter = 0
             var dCounter = 0
             willPut {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (wCounter++) {
                     0 -> {
                         assertEquals(0, dCounter)
@@ -153,7 +157,7 @@ open class DBTests_03_Listeners : DBTests() {
                 }
             }
             willDeleteIt {
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (wCounter++) {
                     2 -> {
                         assertEquals(2, dCounter)
@@ -168,7 +172,7 @@ open class DBTests_03_Listeners : DBTests() {
             }
             didPut {
                 assertTrue(pBatchApplied)
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (dCounter++) {
                     0 -> {
                         assertEquals(2, wCounter)
@@ -183,7 +187,7 @@ open class DBTests_03_Listeners : DBTests() {
             }
             didDeleteIt {
                 assertTrue(dBatchApplied)
-                assertEquals("Adult", typeName)
+                assertBytesEquals("Adult".toAsciiBytes(), typeName)
                 when (dCounter++) {
                     2 -> {
                         assertEquals(4, wCounter)
@@ -204,8 +208,8 @@ open class DBTests_03_Listeners : DBTests() {
         }
 
         db.execBatch {
-            delete(newKeyFrom(Models.salomon))
-            delete(newKeyFrom(Models.laila))
+            delete(keyFrom(Models.salomon))
+            delete(keyFrom(Models.laila))
             dBatchApplied = true
         }
     }

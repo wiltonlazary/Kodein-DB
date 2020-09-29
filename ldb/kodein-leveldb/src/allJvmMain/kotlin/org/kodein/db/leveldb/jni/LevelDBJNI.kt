@@ -1,11 +1,10 @@
 package org.kodein.db.leveldb.jni
 
 import org.kodein.db.leveldb.LevelDB
+import org.kodein.db.leveldb.LevelDBException
 import org.kodein.db.leveldb.LevelDBFactory
-import org.kodein.memory.io.Allocation
-import org.kodein.memory.io.KBuffer
-import org.kodein.memory.io.ReadBuffer
-import org.kodein.memory.io.wrap
+import org.kodein.memory.io.*
+import java.nio.ByteBuffer
 
 /**
  * Native implementation of the LevelDB interface, using Google's C++ LevelDB.
@@ -15,14 +14,14 @@ import org.kodein.memory.io.wrap
  * However, it requires its native library to be loaded (loading depends on the platform).
  */
 @Suppress("FunctionName")
-class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, options: LevelDB.Options, override val path: String) : NativeBound(ptr, "DB", null, options), LevelDB {
+public class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, options: LevelDB.Options, override val path: String) : NativeBound(ptr, "DB", null, options), LevelDB {
 
     private val dbHandler = Handler()
 
     /**
      * LevelDB Factory that handles native LevelDB databases.
      */
-    object Factory : LevelDBFactory {
+    public object Factory : LevelDBFactory {
 
         override fun open(path: String, options: LevelDB.Options): LevelDB {
             val optionsPtr = newNativeOptions(options)
@@ -52,32 +51,27 @@ class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, op
         dbHandler.close()
     }
 
-    override fun put(key: ReadBuffer, value: ReadBuffer, options: LevelDB.WriteOptions) {
-        val directKey = key.directByteBuffer()
-        val directValue = value.directByteBuffer()
+    override fun put(key: ReadMemory, value: ReadMemory, options: LevelDB.WriteOptions) {
+        val directKey = key.directJvmNioKBuffer()
+        val directValue = value.directJvmNioKBuffer()
 
         if (directKey != null && directValue != null) {
-            Native.putBB(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), directValue, directValue.position(), directValue.remaining(), options.sync)
+            Native.putBB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, directValue.byteBuffer, directValue.absPosition, directValue.available, options.sync)
         } else if (directValue != null) {
-            val arrayKey = key.array()
-            Native.putAB(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, directValue, directValue.position(), directValue.remaining(), options.sync)
+            Native.putAB(nonZeroPtr, key.array(), key.arrayOffset(), key.size, directValue.byteBuffer, directValue.absPosition, directValue.available, options.sync)
         } else if (directKey != null) {
-            val arrayValue = value.array()
-            Native.putBA(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), arrayValue.array, arrayValue.offset, arrayValue.length, options.sync)
+            Native.putBA(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, value.array(), value.arrayOffset(), value.size, options.sync)
         } else {
-            val arrayKey = key.array()
-            val arrayValue = value.array()
-            Native.putAA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, arrayValue.array, arrayValue.offset, arrayValue.length, options.sync)
+            Native.putAA(nonZeroPtr, key.array(), key.arrayOffset(), key.size, value.array(), value.arrayOffset(), value.size, options.sync)
         }
     }
 
-    override fun delete(key: ReadBuffer, options: LevelDB.WriteOptions) {
-        val directKey = key.directByteBuffer()
+    override fun delete(key: ReadMemory, options: LevelDB.WriteOptions) {
+        val directKey = key.directJvmNioKBuffer()
         if (directKey != null) {
-            Native.deleteB(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), options.sync)
+            Native.deleteB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, options.sync)
         } else {
-            val arrayKey = key.array()
-            Native.deleteA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, options.sync)
+            Native.deleteA(nonZeroPtr, key.array(), key.arrayOffset(), key.size, options.sync)
         }
     }
 
@@ -85,25 +79,23 @@ class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, op
         Native.write(nonZeroPtr, (batch as WriteBatch).nonZeroPtr, options.sync)
     }
 
-    override fun get(key: ReadBuffer, options: LevelDB.ReadOptions): Allocation? {
-        val directKey = key.directByteBuffer()
+    override fun get(key: ReadMemory, options: LevelDB.ReadOptions): Allocation? {
+        val directKey = key.directJvmNioKBuffer()
         val valuePtr = if (directKey != null) {
-            Native.getB(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
+            Native.getB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
         } else {
-            val arrayKey = key.array()
-            Native.getA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
+            Native.getA(nonZeroPtr, key.array(), key.arrayOffset(), key.size, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
         }
         return if (valuePtr == 0L) null else NativeBytes(valuePtr, dbHandler, this.options)
 
     }
 
-    override fun indirectGet(key: ReadBuffer, options: LevelDB.ReadOptions): Allocation? {
-        val directKey = key.directByteBuffer()
+    override fun indirectGet(key: ReadMemory, options: LevelDB.ReadOptions): Allocation? {
+        val directKey = key.directJvmNioKBuffer()
         val valuePtr = if (directKey != null) {
-            Native.indirectGetB(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
+            Native.indirectGetB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
         } else {
-            val arrayKey = key.array()
-            Native.indirectGetA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
+            Native.indirectGetA(nonZeroPtr, key.array(), key.arrayOffset(), key.size, options.verifyChecksums, options.fillCache, snapshotPtr(options.snapshot))
         }
         return if (valuePtr == 0L) null else NativeBytes(valuePtr, dbHandler, this.options)
     }
@@ -137,36 +129,33 @@ class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, op
         override fun release(ptr: Long) {
             Native.bufferRelease(ptr)
         }
+
+        override fun toString(): String = buffer.toString()
     }
 
     private class WriteBatch internal constructor(ptr: Long, handler: Handler, options: LevelDB.Options) : NativeBound(ptr, "WriteBatch", handler, options), LevelDB.WriteBatch {
 
-        override fun put(key: ReadBuffer, value: ReadBuffer) {
-            val directKey = key.directByteBuffer()
-            val directValue = value.directByteBuffer()
+        override fun put(key: ReadMemory, value: ReadMemory) {
+            val directKey: JvmNioKBuffer? = key.directJvmNioKBuffer()
+            val directValue: JvmNioKBuffer? = value.directJvmNioKBuffer()
 
             if (directKey != null && directValue != null) {
-                Native.writeBatchPutBB(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), directValue, directValue.position(), directValue.remaining())
+                Native.writeBatchPutBB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, directValue.byteBuffer, directValue.absPosition, directValue.available)
             } else if (directValue != null) {
-                val arrayKey = key.array()
-                Native.writeBatchPutAB(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, directValue, directValue.position(), directValue.remaining())
+                Native.writeBatchPutAB(nonZeroPtr, key.array(), key.arrayOffset(), key.size, directValue.byteBuffer, directValue.absPosition, directValue.available)
             } else if (directKey != null) {
-                val arrayValue = value.array()
-                Native.writeBatchPutBA(nonZeroPtr, directKey, directKey.position(), directKey.remaining(), arrayValue.array, arrayValue.offset, arrayValue.length)
+                Native.writeBatchPutBA(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available, value.array(), value.arrayOffset(), value.size)
             } else {
-                val arrayKey = key.array()
-                val arrayValue = value.array()
-                Native.writeBatchPutAA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length, arrayValue.array, arrayValue.offset, arrayValue.length)
+                Native.writeBatchPutAA(nonZeroPtr, key.array(), key.arrayOffset(), key.size, value.array(), value.arrayOffset(), value.size)
             }
         }
 
-        override fun delete(key: ReadBuffer) {
-            val directKey = key.directByteBuffer()
+        override fun delete(key: ReadMemory) {
+            val directKey = key.directJvmNioKBuffer()
             if (directKey != null) {
-                Native.writeBatchDeleteB(nonZeroPtr, directKey, directKey.position(), directKey.remaining())
+                Native.writeBatchDeleteB(nonZeroPtr, directKey.byteBuffer, directKey.absPosition, directKey.available)
             } else {
-                val arrayKey = key.array()
-                Native.writeBatchDeleteA(nonZeroPtr, arrayKey.array, arrayKey.offset, arrayKey.length)
+                Native.writeBatchDeleteA(nonZeroPtr, key.array(), key.arrayOffset(), key.size)
             }
         }
 
@@ -192,51 +181,65 @@ class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, op
 
     }
 
-
     private class Cursor internal constructor(ptr: Long, handler: Handler, options: LevelDB.Options) : NativeBound(ptr, "Cursor", handler, options), LevelDB.Cursor {
 
-        private val itHandler = Handler()
+        private val lens = IntArray(2) { -1 }
+
+        private var keyBuffer: JvmNioKBuffer? = null
+        private var valueBuffer: JvmNioKBuffer? = null
 
         override fun isValid(): Boolean {
-            return Native.iteratorValid(nonZeroPtr)
+            return lens[0] >= 0
         }
 
         override fun seekToFirst() {
-            Native.iteratorSeekToFirst(nonZeroPtr)
+            Native.iteratorSeekToFirst(nonZeroPtr, lens)
         }
 
         override fun seekToLast() {
-            Native.iteratorSeekToLast(nonZeroPtr)
+            Native.iteratorSeekToLast(nonZeroPtr, lens)
         }
 
-        override fun seekTo(target: ReadBuffer) {
-            val directTarget = target.directByteBuffer()
+        override fun seekTo(target: ReadMemory) {
+            val directTarget = target.directJvmNioKBuffer()
             if (directTarget != null) {
-                Native.iteratorSeekB(nonZeroPtr, directTarget, directTarget.position(), directTarget.remaining())
+                Native.iteratorSeekB(nonZeroPtr, directTarget.byteBuffer, directTarget.absPosition, directTarget.available, lens)
             } else {
-                val arrayTarget = target.array()
-                Native.iteratorSeekA(nonZeroPtr, arrayTarget.array, arrayTarget.offset, arrayTarget.length)
+                Native.iteratorSeekA(nonZeroPtr, target.array(), target.arrayOffset(), target.size, lens)
             }
         }
 
         override fun next() {
-            Native.iteratorNext(nonZeroPtr)
+            Native.iteratorNext(nonZeroPtr, lens)
         }
 
         override fun prev() {
-            Native.iteratorPrev(nonZeroPtr)
+            Native.iteratorPrev(nonZeroPtr, lens)
+        }
+
+        companion object {
+            private fun getBuffer(len: Int, buffer: JvmNioKBuffer?): JvmNioKBuffer {
+                if (len < 0) throw LevelDBException("Cursor is not valid")
+                val realBuffer =
+                    if (buffer == null || buffer.capacity < len) JvmNioKBuffer(ByteBuffer.allocateDirect(((len / 1024) + 2) * 1024))
+                    else buffer
+                realBuffer.limit = len
+                return realBuffer
+            }
         }
 
         override fun transientKey(): KBuffer {
-            return KBuffer.wrap(Native.iteratorKey(nonZeroPtr))
+            val buffer = getBuffer(lens[0], keyBuffer)
+            keyBuffer = buffer
+            Native.iteratorKey(nonZeroPtr, buffer.byteBuffer)
+            return buffer
         }
 
         override fun transientValue(): KBuffer {
-            return KBuffer.wrap(Native.iteratorValue(nonZeroPtr))
-        }
-
-        override fun beforeClose() {
-            itHandler.close()
+            val buffer = getBuffer(lens[1], valueBuffer)
+            valueBuffer = buffer
+            Native.iteratorValue(nonZeroPtr, buffer.byteBuffer)
+            return buffer
         }
 
         override fun release(ptr: Long) {
@@ -244,7 +247,7 @@ class LevelDBJNI private constructor(ptr: Long, private val optionsPtr: Long, op
         }
     }
 
-    companion object {
+    public companion object {
 
         private fun newNativeOptions(options: LevelDB.Options): Long {
             return Native.optionsNew(

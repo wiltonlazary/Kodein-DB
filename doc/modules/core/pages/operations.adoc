@@ -1,0 +1,113 @@
+= Getting and writing data
+
+== Put, Delete, Get
+
+Kodein-DB does not know the difference between Put and Update.
+If you put a document that already exists in the database, it will be overwritten (you can, however, manually xref:advanced.adoc#locking-check[check] the existence and state of an overwritten model).
+
+To put a document inside the database, simply use the `put` method:
+
+[source,kotlin]
+.Putting a model
+----
+val key = db.put(user) //<1>
+----
+<1> The `put` method returns the `Key` that refers to the model.
+
+You can as easily delete a document:
+
+[source,kotlin]
+.Deleting a document
+----
+db.delete(key)
+----
+
+To get a model, simply use the `get` method:
+
+[source,kotlin]
+.Getting a model
+----
+val user = db[key]
+----
+
+== Handling Keys
+
+=== Definition
+
+A `Key` is the unique identifier that identifies a document (and the associated model) inside the database.
+It contains the following information:
+
+- The type of the document (which is also the type of the model, unless you're using xref:defining-data-model.adoc#polymorphism[polymorphism]).
+- The Id of the document.
+
+[TIP]
+====
+You can think of Kodein-DB as a file cabinet:
+
+- The document type defines the drawer inside the cabinet.
+- The document ID is the label that defines the document inside the drawer.
+====
+
+IMPORTANT: A key is specific to a Kodein-DB instance: a key refers to a model relative to a specific Kodein-DB.
+Do *not* share a Key: the same model with the same ID may give 2 different keys on two different databases.
+
+
+=== Creating a Key
+
+==== From a model
+
+You can always ask Kodein-DB to provide you with the key of a specific model:
+
+[source,kotlin]
+.Creating a key
+----
+val key = db.newKey(user)
+----
+
+CAUTION: You can create a key from any model, whether it exists in database or not.
+Using `newKeyFrom` does *not* ensure you that the model exists in database, nor does it put it.
+
+
+[[key-from-id]]
+==== From ID values
+
+You can easily create a key from its ID value(s):
+
+[source,kotlin]
+.Creating a key
+----
+val key = db.newKey<User>("01234567-89ab-cdef-0123-456789abcdef")
+----
+
+[IMPORTANT]
+====
+If you are using xref:defining-data-model.adoc#id-index[composite IDs], you need to provide all values of the ID. +
+In the case of the earlier example, you would need to create the key as such:
+
+[source,kotlin]
+.Creating a key with a composite ID
+----
+val key = db.newKey<User>("Doe", "John", "01234567-89ab-cdef-0123-456789abcdef")
+----
+====
+
+
+==== From a Base64 representation
+
+Once you have a `Key` (either from `put` or `newKey`), you can serialize it to Base64:
+
+[source,kotlin]
+.serializing a key to Base64
+----
+val b64 = key.toBase64()
+----
+
+Then, you can re-create a key from a Base64 string:
+
+[source,kotlin]
+.deserializing a key from Base64
+----
+val key = db.newKeyFromB64(b64)
+----
+
+IMPORTANT: Even when serialized in Base64, a Key is only valid on the Kodein-DB that created it.

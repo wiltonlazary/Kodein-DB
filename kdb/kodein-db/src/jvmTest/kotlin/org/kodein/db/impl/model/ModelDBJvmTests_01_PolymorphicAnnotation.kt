@@ -2,7 +2,7 @@ package org.kodein.db.impl.model
 
 import org.kodein.db.TypeTable
 import org.kodein.db.model.findAllByType
-import org.kodein.db.model.orm.Serializer
+import org.kodein.db.model.orm.DefaultSerializer
 import org.kodein.db.model.putAll
 import org.kodein.db.orm.kryo.KryoSerializer
 import org.kodein.memory.use
@@ -11,7 +11,7 @@ import kotlin.test.*
 @Suppress("ClassName")
 class ModelDBJvmTests_01_PolymorphicAnnotation : ModelDBTests() {
 
-    override fun testSerializer(): Serializer<Any> = KryoSerializer()
+    override fun testSerializer(): DefaultSerializer = KryoSerializer()
 
     override fun testTypeTable(): TypeTable? = null
 
@@ -19,9 +19,9 @@ class ModelDBJvmTests_01_PolymorphicAnnotation : ModelDBTests() {
     fun test01_PolymorphicAnnotations() {
         val gilbert = AAdult(0, "Gilbert", "BRYS", Date(1, 9, 1954))
         val veronique = AAdult(1, "Véronique", "BRYS", Date(17, 10, 1957))
-        val salomon = AChild(2, "Salomon", "BRYS", Date(15, 12, 1986), mdb.newKeyFrom(gilbert) to mdb.newKeyFrom(veronique))
-        val maroussia = AChild(3, "Maroussia", "BRYS", Date(18, 8, 1988), mdb.newKeyFrom(gilbert) to mdb.newKeyFrom(veronique))
-        val benjamin = AChild(4, "Benjamin", "BRYS", Date(23, 6, 1992), mdb.newKeyFrom(gilbert) to mdb.newKeyFrom(veronique))
+        val salomon = AChild(2, "Salomon", "BRYS", Date(15, 12, 1986), mdb.keyFrom(gilbert) to mdb.keyFrom(veronique))
+        val maroussia = AChild(3, "Maroussia", "BRYS", Date(18, 8, 1988), mdb.keyFrom(gilbert) to mdb.keyFrom(veronique))
+        val benjamin = AChild(4, "Benjamin", "BRYS", Date(23, 6, 1992), mdb.keyFrom(gilbert) to mdb.keyFrom(veronique))
 
         mdb.putAll(listOf(gilbert, veronique, salomon, maroussia, benjamin))
 

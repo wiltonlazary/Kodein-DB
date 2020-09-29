@@ -10,32 +10,16 @@ kodein {
 
         common.main.dependencies {
             api(project(":kdb:kodein-db-api"))
-            api("org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$kotlinxSerializationVer")
+            api("org.jetbrains.kotlinx:kotlinx-serialization-core:$kotlinxSerializationVer")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:$kotlinxSerializationVer")
         }
 
-        add(kodeinTargets.jvm.jvm) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$kotlinxSerializationVer")
-            }
-        }
-
-        add(kodeinTargets.native.host) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:$kotlinxSerializationVer")
-            }
-        }
-
-        add(kodeinTargets.native.allIos) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:$kotlinxSerializationVer")
-            }
-        }
-
-        sourceSet(kodeinSourceSets.allNative) {
-            main.dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-serialization-runtime-native:$kotlinxSerializationVer")
-            }
-        }
-
+        add(kodeinTargets.jvm.jvm)
+        add(kodeinTargets.native.allDarwin + kodeinTargets.native.allDesktop)
     }
+}
+
+kodeinUpload {
+    name = "kodein-db-serializer-kotlinx"
+    description = "Kodein-DB with KotlinX serializer library"
 }

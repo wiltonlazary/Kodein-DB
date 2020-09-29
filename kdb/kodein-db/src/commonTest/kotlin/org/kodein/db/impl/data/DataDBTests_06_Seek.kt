@@ -13,15 +13,15 @@ class DataDBTests_06_Seek : DataDBTests() {
 
     @Test
     fun test00_SeekPK() {
-        ddb.put(ddb.newKey("Test", Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
-        ddb.put(ddb.newKey("Test", Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
 
-        ddb.findAllByType("Test").use {
+        ddb.findAllByType(1).use {
             assertTrue(it.isValid())
-            val key = ddb.newKey("Test", Value.ofAscii("bba"))
+            val key = ddb.newKey(1, Value.ofAscii("bba"))
             it.seekTo(key)
             assertTrue(it.isValid())
-            assertCursorIs(byteArray('o', 0, "Test", 0, "bbb", 0), byteArray("ValueB1!"), it)
+            assertCursorIs(byteArray('o', 0, 0, 0, 0, 1, "bbb", 0), byteArray("ValueB1!"), it)
             it.next()
             assertFalse(it.isValid())
         }
@@ -29,26 +29,26 @@ class DataDBTests_06_Seek : DataDBTests() {
 
     @Test
     fun test01_SeekPKBefore() {
-        ddb.put(ddb.newKey("Test", Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
-        ddb.put(ddb.newKey("Test", Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
 
-        ddb.findAllByType("Test").use {
+        ddb.findAllByType(1).use {
             assertTrue(it.isValid())
-            val key = ddb.newKey("Test", Value.ofAscii("A"))
+            val key = ddb.newKey(1, Value.ofAscii("A"))
             it.seekTo(key)
             assertTrue(it.isValid())
-            assertCursorIs(byteArray('o', 0, "Test", 0, "aaa", 0), byteArray("ValueA1!"), it)
+            assertCursorIs(byteArray('o', 0, 0, 0, 0, 1, "aaa", 0), byteArray("ValueA1!"), it)
         }
     }
 
     @Test
     fun test02_SeekPKAfter() {
-        ddb.put(ddb.newKey("Test", Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
-        ddb.put(ddb.newKey("Test", Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("aaa")), Value.ofAscii("ValueA1!"), indexSet("Symbols" to Value.ofAscii("alpha", "beta")))
+        ddb.put(ddb.newKey(1, Value.ofAscii("bbb")), Value.ofAscii("ValueB1!"), indexSet("Numbers" to Value.ofAscii("forty", "two")))
 
-        ddb.findAllByType("Test").use {
+        ddb.findAllByType(1).use {
             assertTrue(it.isValid())
-            val key = ddb.newKey("Test", Value.ofAscii("z"))
+            val key = ddb.newKey(1, Value.ofAscii("z"))
             it.seekTo(key)
             assertFalse(it.isValid())
         }

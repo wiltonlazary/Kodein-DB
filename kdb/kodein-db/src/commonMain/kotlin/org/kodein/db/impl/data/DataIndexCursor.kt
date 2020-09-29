@@ -1,12 +1,12 @@
 package org.kodein.db.impl.data
 
+import org.kodein.db.data.DataCursor
 import org.kodein.db.leveldb.LevelDB
-import org.kodein.memory.io.Allocation
-import org.kodein.memory.io.KBuffer
+import org.kodein.memory.io.ReadBuffer
 
-internal class DataIndexCursor internal constructor(private val ldb: LevelDB, it: LevelDB.Cursor, prefix: Allocation, options: LevelDB.ReadOptions) : AbstractDataCursor(it, prefix) {
+internal class DataIndexCursor internal constructor(private val ldb: LevelDB, cursor: LevelDB.Cursor, prefix: ByteArray, options: LevelDB.ReadOptions) : AbstractDataCursor(cursor, prefix) {
 
-    private var cachedItValue: KBuffer? = null
+    private var cachedItValue: ReadBuffer? = null
 
     private val options: LevelDB.ReadOptions = if (options.snapshot == null) options.copy(snapshot = ldb.newSnapshot()) else options
 
@@ -16,7 +16,7 @@ internal class DataIndexCursor internal constructor(private val ldb: LevelDB, it
         cachedItValue = null
     }
 
-    private fun itValue() = cachedItValue ?: it.transientValue().also { cachedItValue = it }
+    private fun itValue() = cachedItValue ?: cursor.transientValue().also { cachedItValue = it }
 
     override fun close() {
         super.close()
@@ -27,4 +27,8 @@ internal class DataIndexCursor internal constructor(private val ldb: LevelDB, it
     override fun thisKey() = itValue()
 
     override fun thisValue() = ldb.get(itValue(), options) ?: throw IllegalStateException("Index entry points to invalid object entry")
+
+    override fun duplicate(): DataCursor = DataIndexCursor(ldb, ldb.newCursor(options), prefix, options).also {
+        it.cursor.seekTo(it.cursor.transientKey())
+    }
 }

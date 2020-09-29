@@ -1,26 +1,28 @@
 package org.kodein.db.impl.model
 
-import org.kodein.db.Anticipate
-import org.kodein.db.Options
 import org.kodein.db.Value
 import org.kodein.db.indexSet
-import org.kodein.db.model.*
+import org.kodein.db.model.findAllByIndex
+import org.kodein.db.model.findAllByType
 import org.kodein.db.model.orm.Metadata
 import org.kodein.db.model.orm.MetadataExtractor
+import org.kodein.db.model.putAll
 import org.kodein.memory.use
-import org.kodein.memory.util.MaybeThrowable
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @Suppress("ClassName")
-open class ModelDBTests_11_MetadataExtractor : ModelDBTests() {
+open class ModelDBTests_10_MetadataExtractor : ModelDBTests() {
 
-    override fun testMetadataExtractor() = MetadataExtractor {
-        when (it) {
+    override fun testMetadataExtractor() = MetadataExtractor { model, _ ->
+        when (model) {
             is Date -> Metadata(
-                    id = Value.of(it.year, it.month, it.day),
+                    id = Value.of(model.year, model.month, model.day),
                     indexes = indexSet(
-                            "month" to Value.of(it.month, it.year, it.day),
-                            "day" to Value.of(it.day)
+                            "month" to Value.of(model.month, model.year, model.day),
+                            "day" to Value.of(model.day)
                     )
             )
             else -> throw UnsupportedOperationException()

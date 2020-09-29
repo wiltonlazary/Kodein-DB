@@ -1,11 +1,13 @@
 package org.kodein.db.data
 
 import org.kodein.db.BaseCursor
-import org.kodein.memory.io.ReadBuffer
+import org.kodein.memory.io.ReadMemory
 
-interface DataCursor : BaseCursor {
+public interface DataCursor : BaseCursor {
 
-    fun transientKey(): ReadBuffer
-    fun transientValue(): ReadBuffer
+    public fun transientKey(): ReadMemory
+    public fun transientValue(): ReadMemory
+
+    public fun duplicate(): DataCursor
 
 }

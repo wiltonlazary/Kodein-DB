@@ -6,11 +6,11 @@ import kotlin.test.fail
 private fun KBuffer.putValues(vararg values: Any) {
     for (value in values) {
         when (value) {
-            is Number -> put(value.toByte())
-            is Char -> put(value.toByte())
+            is Number -> putByte(value.toByte())
+            is Char -> putByte(value.toByte())
             is String -> {
                 for (i in 0 until value.length)
-                    put(value[i].toByte())
+                    putByte(value[i].toByte())
             }
             else -> throw IllegalArgumentException(value.toString())
         }
@@ -57,19 +57,19 @@ fun ByteArray.description(): String {
     return sb.toString()
 }
 
-@UseExperimental(ExperimentalUnsignedTypes::class)
+@OptIn(ExperimentalUnsignedTypes::class)
 fun ByteArray.hex(): String = joinToString { it.toUByte().toUInt().toString(16).toUpperCase().padStart(2, '0') }
 
-fun assertBytesEquals(expected: ByteArray, actual: ByteArray, description: Boolean = true) {
+fun assertBytesEquals(expected: ByteArray, actual: ByteArray, description: Boolean = true, prefix: String = "") {
     if (!expected.contentEquals(actual)) {
         if (description)
-            fail("Bytes are not equal:\nExpected: ${expected.description()}\nActual:   ${actual.description()}")
+            fail("${prefix}Bytes are not equal:\nExpected: ${expected.description()}\nActual:   ${actual.description()}")
         else
-            fail("Bytes are not equal:\nExpected: ${expected.hex()}\nActual:   ${actual.hex()}")    }
+            fail("${prefix}Bytes are not equal:\nExpected: ${expected.hex()}\nActual:   ${actual.hex()}")    }
 }
 
-fun assertBytesEquals(expected: ByteArray, actual: ReadBuffer, description: Boolean = true) =
-        assertBytesEquals(expected, actual.duplicate().readBytes(), description)
+fun assertBytesEquals(expected: ByteArray, actual: ReadMemory, description: Boolean = true, prefix: String = "") =
+        assertBytesEquals(expected, actual.duplicate().readBytes(), description, prefix)
 
-fun assertBytesEquals(expected: ReadBuffer, actual: ReadBuffer, description: Boolean = true) =
-        assertBytesEquals(expected.getBytes(expected.position), actual.getBytes(actual.position), description)
+fun assertBytesEquals(expected: ReadMemory, actual: ReadMemory, description: Boolean = true) =
+        assertBytesEquals(expected.getBytes(0), actual.getBytes(0), description)
